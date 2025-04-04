@@ -492,7 +492,6 @@ configure_zshrc() {
 
     # Add key bindings for history search
     cat <<'EOL' >> ~/.zshrc
-
 # Key bindings
 bindkey '^[[A' up-line-or-history    # Up arrow
 bindkey '^[[B' down-line-or-history  # Down arrow
@@ -525,8 +524,7 @@ zle -N up-line-or-beginning-search
 zle -N down-line-or-beginning-search
 bindkey '^[[A' up-line-or-beginning-search    # Up arrow
 bindkey '^[[B' down-line-or-beginning-search  # Down arrow
-
-EOL'
+EOL
 
     # Update plugins with correct order
     log "$BLUE" "Configuring plugins in .zshrc..."
