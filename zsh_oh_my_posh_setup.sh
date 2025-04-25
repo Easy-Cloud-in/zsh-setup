@@ -11,6 +11,8 @@ trap 'echo "Error on line $LINENO. Previous command exited with status $?"' ERR
 
 # Add a new force update flag
 FORCE_UPDATE=false
+# Add a flag to only update .zshrc
+UPDATE_RC=false
 
 # Define colors as variables for better maintainability
 readonly RED='\033[1;31m'
@@ -34,6 +36,10 @@ parse_arguments() {
                 FORCE_UPDATE=true
                 shift
                 ;;
+            --update-rc)
+                UPDATE_RC=true
+                shift
+                ;;
             -h|--help)
                 show_help
                 exit 0
@@ -45,6 +51,18 @@ parse_arguments() {
                 ;;
         esac
     done
+}
+
+# Show help message
+show_help() {
+    echo "Usage: $0 [options]"
+    echo
+    echo "Options:"
+    echo "  -f, --force       Force reinstallation/reconfiguration of all components."
+    echo "  --update-rc     Only update the ~/.zshrc configuration file based on the selected theme."
+    echo "  -h, --help        Show this help message."
+    echo
+    echo "This script installs and configures Zsh, Oh My Zsh, Oh My Posh, and recommended plugins."
 }
 
 # Check for required commands
@@ -408,50 +426,14 @@ if command -v fzf &> /dev/null; then
     [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 fi
 
-# --- NVM (Node Version Manager) Lazy Loading ---
-# Tip: Loading NVM eagerly slows down shell startup. This loads it on demand.
-# -------------------------------------------------------------------------
+# --- NVM (Node Version Manager) ---
+# Load NVM script if it exists. This might slightly increase shell startup time
+# compared to lazy loading, but ensures Node is available immediately.
+# --------------------------------------------------------------------------
 export NVM_DIR="$HOME/.nvm"
-lazy_load_nvm() {
-  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" --no-use # Load nvm
-  # Add NVM's Node path if a version is activated
-  if [ -n "$NVM_BIN" ] && [[ ":$PATH:" != *":$NVM_BIN:"* ]]; then
-    export PATH="$NVM_BIN:$PATH"
-  fi
-}
-
-# Create functions for nvm commands that will trigger lazy loading
-nvm() {
-  unset -f nvm node npm npx pnpm yarn # Remove lazy-loading triggers
-  lazy_load_nvm
-  nvm "$@"
-}
-node() {
-  unset -f nvm node npm npx pnpm yarn
-  lazy_load_nvm
-  node "$@"
-}
-npm() {
-  unset -f nvm node npm npx pnpm yarn
-  lazy_load_nvm
-  npm "$@"
-}
-npx() {
-  unset -f nvm node npm npx pnpm yarn
-  lazy_load_nvm
-  npx "$@"
-}
-# Add other Node-related commands if needed (pnpm, yarn)
-pnpm() {
-  unset -f nvm node npm npx pnpm yarn
-  lazy_load_nvm
-  pnpm "$@"
-}
-yarn() {
-  unset -f nvm node npm npx pnpm yarn
-  lazy_load_nvm
-  yarn "$@"
-}
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # Load nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" # Load nvm bash_completion (works in Zsh too)
+# The nvm script should handle adding the correct Node version to the PATH
 
 # --- Other Environment Settings ---
 # Add custom aliases, environment variables, etc. here or source them.
@@ -743,21 +725,39 @@ main() {
     parse_arguments "$@"
 
     if [ "$FORCE_UPDATE" = true ]; then
-        log "$YELLOW" "Force update mode enabled - will reinstall/reconfigure all components"
+        log "$YELLOW" "⚡ Force update mode enabled - will reinstall/reconfigure all components"
+    elif [ "$UPDATE_RC" = true ]; then
+        log "$YELLOW" "⚙️ Update .zshrc mode enabled - only configuration will be updated"
     fi
 
-    check_requirements
+    # Always backup existing .zshrc before potentially modifying it
     backup_zshrc
-    install_zsh
-    install_oh_my_zsh
-    install_oh_my_posh
-    install_search_utilities
-    install_plugins
-    setup_themes
-    
-    # Always run these functions regardless of installation status
-    migrate_bash_environment
-    
+
+    # If only updating rc, skip installations/checks
+    if [ "$UPDATE_RC" = true ] && [ "$FORCE_UPDATE" = false ]; then
+        log "$BLUE" "Skipping installation checks and plugin updates for --update-rc mode."
+        # Ensure themes are available for selection, even in update-only mode
+        setup_themes
+        # Ensure migration logic runs if needed
+        migrate_bash_environment
+    else
+        # Full run (or force run): check requirements, install/update everything
+        check_requirements
+        install_zsh
+        install_oh_my_zsh
+        install_oh_my_posh
+        install_search_utilities
+        # Install/Update plugins
+        if install_plugins; then
+             log "$GREEN" "All plugins installed/updated successfully."
+        else
+             log "$YELLOW" "⚠️ Some plugins failed to install or update. Check logs above."
+        fi
+        setup_themes
+        migrate_bash_environment
+    fi
+
+    # --- Theme Selection and .zshrc Configuration (Common to all modes) ---
     # Clear screen before showing themes
     clear
     
@@ -820,8 +820,8 @@ main() {
             
             if [[ "$confirm" =~ ^[Yy]$ ]]; then
                 configure_zshrc "$THEMES_DIR" "$(basename "$selected_theme")"
-                log "$GREEN" "Setup completed successfully!"
-                log "$YELLOW" "Restart your terminal or run 'zsh' to apply the changes."
+                log "$GREEN" "✅ Setup completed successfully!"
+                log "$YELLOW" "Please restart your terminal or run 'exec zsh' to apply the changes."
                 break
             fi
         else

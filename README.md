@@ -308,3 +308,34 @@ These projects have made our terminal experience better, and we're grateful for 
 ---
 
 Made with ❤️ by [Easy-Cloud.in](https://easy-cloud.in)
+
+## Usage
+
+To run the setup script:
+
+```bash
+./zsh_oh_my_posh_setup.sh [options]
+```
+
+**Available Options:**
+
+*   `-h`, `--help`: Show the help message and exit.
+*   `-f`, `--force`: Force reinstallation of Zsh, Oh My Zsh, Oh My Posh, and plugins, even if they seem to be installed already. This also overwrites the existing `.zshrc` backup.
+*   `--update-rc`: Only update the `~/.zshrc` configuration file. Skips installation checks and plugin updates. Useful for quickly applying changes to the `.zshrc` template or switching themes without reinstalling components.
+
+**Example:**
+
+Run the full setup:
+```bash
+./zsh_oh_my_posh_setup.sh
+```
+
+Force a full reinstall/reconfiguration:
+```bash
+./zsh_oh_my_posh_setup.sh --force
+```
+
+Only update the `.zshrc` file (e.g., after modifying the script or to change themes):
+```bash
+./zsh_oh_my_posh_setup.sh --update-rc
+```
