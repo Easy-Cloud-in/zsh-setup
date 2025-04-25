@@ -20,12 +20,21 @@ log() {
 # Directory where Oh My Posh themes are stored
 readonly THEMES_DIR="$HOME/.oh-my-posh-themes"
 readonly PREVIEW_TIME=3  # Time in seconds to preview each theme
+readonly ZSHRC_FILE="$HOME/.zshrc"
+readonly ZSHRC_BACKUP="$HOME/.zshrc.backup" # Fixed backup file name
+readonly OMP_MARKER_START="# --- Oh My Posh Theme Start ---"
+readonly OMP_MARKER_END="# --- Oh My Posh Theme End ---"
 
 # Function to check dependencies
 check_dependencies() {
-    if ! command -v oh-my-posh &> /dev/null; then
-        log "$RED" "Error: Oh My Posh is not installed."
-        log "$YELLOW" "Please install Oh My Posh first using the setup script."
+    local missing_deps=()
+    command -v oh-my-posh &> /dev/null || missing_deps+=("oh-my-posh")
+    command -v wget &> /dev/null || missing_deps+=("wget")
+    command -v unzip &> /dev/null || missing_deps+=("unzip")
+
+    if [ ${#missing_deps[@]} -ne 0 ]; then
+        log "$RED" "Error: Missing dependencies: ${missing_deps[*]}"
+        log "$YELLOW" "Please install the missing dependencies and try again."
         exit 1
     fi
 }
@@ -35,12 +44,24 @@ check_themes_dir() {
     if [ ! -d "$THEMES_DIR" ]; then
         log "$RED" "Error: Oh My Posh themes directory not found at $THEMES_DIR"
         log "$YELLOW" "Attempting to create and download themes..."
-        
+
         mkdir -p "$THEMES_DIR"
-        if wget https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip -O "$THEMES_DIR/themes.zip"; then
-            unzip "$THEMES_DIR/themes.zip" -d "$THEMES_DIR"
-            rm "$THEMES_DIR/themes.zip"
-            log "$GREEN" "Themes downloaded successfully!"
+        local themes_zip="$THEMES_DIR/themes.zip"
+
+        # Remove potentially corrupted old zip file
+        rm -f "$themes_zip"
+
+        log "$BLUE" "Downloading themes..."
+        if wget https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip -O "$themes_zip"; then
+            log "$BLUE" "Unzipping themes..."
+            if unzip "$themes_zip" -d "$THEMES_DIR"; then
+                rm "$themes_zip"
+                log "$GREEN" "Themes downloaded and unpacked successfully!"
+            else
+                log "$RED" "Failed to unzip themes. Check permissions or disk space."
+                rm -f "$themes_zip" # Clean up zip on failure
+                exit 1
+            fi
         else
             log "$RED" "Failed to download themes. Please check your internet connection."
             exit 1
@@ -48,19 +69,43 @@ check_themes_dir() {
     fi
 }
 
+# Function to get the last installed theme from .zshrc using markers
+get_last_installed_theme() {
+    if [ ! -f "$ZSHRC_FILE" ]; then
+        log "$YELLOW" "\n⚠️ .zshrc file not found. Cannot determine last theme."
+        return
+    fi
+
+    # Extract the theme path between the markers
+    local theme_line=$(sed -n "/^${OMP_MARKER_START}$/,/^${OMP_MARKER_END}$/{ /eval.*--config/p; }" "$ZSHRC_FILE" | head -n 1)
+
+    if [[ -n "$theme_line" ]]; then
+        # Extract the path using parameter expansion or sed
+        local last_theme=$(echo "$theme_line" | sed -n "s/.*--config '\([^']*\)'.*/\1/p")
+        if [[ -n "$last_theme" ]]; then
+            log "$GREEN" "\n🎨 Last applied theme: $(basename "$last_theme")"
+        else
+             log "$YELLOW" "\n⚠️ Could not parse theme from .zshrc markers."
+        fi
+    else
+        log "$YELLOW" "\n⚠️ No Oh My Posh theme configuration found between markers in $ZSHRC_FILE."
+    fi
+}
+
 # Function to list themes
 list_themes() {
-    local themes=("$THEMES_DIR"/*.json)
+    # Expects the themes array to be passed as an argument ($1: name of the array)
+    local -n themes_ref=$1 # Use nameref for indirect array access
     local count=1
-    
+
     log "$BLUE" "\nAvailable Oh My Posh themes:"
     log "$YELLOW" "----------------------------------------"
-    
-    for theme in "${themes[@]}"; do
+
+    for theme in "${themes_ref[@]}"; do
         echo -e "${GREEN}$count)${NC} $(basename "$theme")"
         ((count++))
     done
-    
+
     log "$YELLOW" "----------------------------------------"
 }
 
@@ -81,20 +126,43 @@ preview_theme() {
 apply_theme() {
     local theme_path=$1
     local theme_name=$(basename "$theme_path")
-    
-    # Backup current .zshrc
-    cp ~/.zshrc ~/.zshrc.backup.$(date +%Y%m%d_%H%M%S)
-    
-    # Remove previous Oh My Posh configuration
-    log "$BLUE" "Removing previous Oh My Posh theme configuration..."
-    sed -i '/^eval "$(oh-my-posh init zsh --config /d' ~/.zshrc
-    
-    # Add new theme configuration
+
+    # Check if .zshrc exists
+    if [ ! -f "$ZSHRC_FILE" ]; then
+        log "$RED" "Error: $ZSHRC_FILE not found. Cannot apply theme."
+        log "$YELLOW" "Please ensure your Zsh configuration file exists."
+        exit 1
+    fi
+
+    # Remove previous backup and create a new one with a fixed name
+    log "$BLUE" "Backing up $ZSHRC_FILE to $ZSHRC_BACKUP..."
+    rm -f "$ZSHRC_BACKUP" # Remove old backup first
+    cp "$ZSHRC_FILE" "$ZSHRC_BACKUP"
+
+    # Remove previous Oh My Posh configuration block using markers
+    log "$BLUE" "Removing previous Oh My Posh theme configuration (if any)..."
+    # Use awk for safer multi-line deletion between markers
+    # Read from current file, write to temporary file, then replace original
+    local temp_file=$(mktemp)
+    awk -v start="$OMP_MARKER_START" -v end="$OMP_MARKER_END" '
+        $0 == start {p=1}
+        !p {print}
+        $0 == end {p=0}
+    ' "$ZSHRC_FILE" > "$temp_file" && mv "$temp_file" "$ZSHRC_FILE"
+
+    # Add new theme configuration with markers
     log "$BLUE" "Applying new theme: $theme_name..."
-    echo 'eval "$(oh-my-posh init zsh --config '"$theme_path"')" # Oh My Posh Theme' >> ~/.zshrc
-    
-    # Apply changes
-    log "$BLUE" "Applying changes..."
+    {
+        echo "$OMP_MARKER_START"
+        echo "eval \"\$(oh-my-posh init zsh --config '$theme_path')\""
+        echo "$OMP_MARKER_END"
+    } >> "$ZSHRC_FILE"
+
+    log "$GREEN" "Theme '$theme_name' successfully applied to $ZSHRC_FILE."
+    log "$YELLOW" "Backup created at $ZSHRC_BACKUP"
+    log "$YELLOW" "Restarting Zsh to apply changes..."
+
+    # Apply changes by restarting zsh
     exec zsh
 }
 
@@ -102,14 +170,23 @@ apply_theme() {
 main() {
     check_dependencies
     check_themes_dir
-    
+
     while true; do
-        list_themes
-        
-        # Get available themes
-        mapfile -t themes < <(find "$THEMES_DIR" -name "*.json" -type f)
-        theme_count=${#themes[@]}
-        
+        # Get available themes sorted alphabetically
+        mapfile -t themes < <(find "$THEMES_DIR" -name "*.omp.json" -type f | sort)
+        local theme_count=${#themes[@]}
+
+        if [ "$theme_count" -eq 0 ]; then
+             log "$RED" "No Oh My Posh themes (*.omp.json) found in $THEMES_DIR."
+             exit 1
+        fi
+
+        # List themes
+        list_themes themes # Pass the array name 'themes'
+
+        # Show last installed theme after the list
+        get_last_installed_theme
+
         # Prompt for theme selection
         log "$BLUE" "\nOptions:"
         echo "- Enter a number (1-$theme_count) to select a theme"
