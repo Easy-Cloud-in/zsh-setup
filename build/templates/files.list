@@ -1,4 +1,3 @@
-zsh-setup/build/templates/files.list
 # Distribution Files List for zsh-setup
 # Format: source_path:destination_path
 # Lines starting with # are comments
