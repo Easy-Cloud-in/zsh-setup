@@ -1,0 +1,231 @@
+# Git Hooks Configuration Template
+# This is the SINGLE SOURCE OF TRUTH for hook configuration
+# The installation script copies this to .git-hooks-config automatically
+#
+# All settings are optional and will use defaults if not specified
+# Boolean values: true/false
+#
+
+# =============================================================================
+# ESSENTIAL SETTINGS - Most commonly used configurations
+# =============================================================================
+
+# Enable/disable merge conflict marker detection (prevents accidental commits with <<<<<<< markers)
+CHECK_CONFLICTS=true
+
+# Enable/disable debug statement detection (finds console.log, print(), debugger, etc.)
+CHECK_DEBUGS=true
+
+# Enable/disable file size warnings (alerts for files larger than MAX_FILE_SIZE_KB)
+CHECK_FILE_SIZE=true
+
+# File size limit in KB - files larger than this trigger a warning
+MAX_FILE_SIZE_KB=1024
+
+# Enforce Conventional Commits format (feat:, fix:, docs:, etc.)
+ENFORCE_CONVENTIONAL_COMMITS=true
+
+# Enable automatic version bumping when pushing to main branches
+AUTO_VERSION_BUMP=true
+
+# Branches that trigger automatic versioning (pipe-separated regex patterns)
+VERSIONING_BRANCHES="main|master"
+
+# =============================================================================
+# PRE-COMMIT HOOK SETTINGS
+# =============================================================================
+
+# Enable/disable TODO/FIXME comment detection (warns about unresolved TODOs)
+CHECK_TODOS=false
+
+# Enable/disable whitespace issue detection (trailing spaces, mixed tabs/spaces)
+CHECK_WHITESPACE=false
+
+# Allowed TODO patterns that won't trigger warnings (pipe-separated)
+# Format: "pattern1|pattern2|pattern3"
+ALLOWED_TODO_PATTERNS="TODO:|FIXME:|NOTE:|XXX:|HACK:"
+
+# Custom debug statement patterns to detect (pipe-separated regex)
+# These are added to the default patterns (console.log, print, etc.)
+CUSTOM_DEBUG_PATTERNS=""
+
+# Files to exclude from pre-commit checks (pipe-separated glob patterns)
+PRECOMMIT_EXCLUDE_PATTERNS="*.min.js|*.min.css|dist/*|build/*|node_modules/*"
+
+# =============================================================================
+# COMMIT MESSAGE HOOK SETTINGS
+# =============================================================================
+
+# Minimum commit message subject line length (prevents too-short messages)
+MIN_SUBJECT_LENGTH=10
+
+# Maximum commit message subject line length (enforces concise subjects)
+MAX_SUBJECT_LENGTH=72
+
+# =============================================================================
+# PRE-PUSH HOOK SETTINGS
+# =============================================================================
+
+# Prevent force pushes to protected branches (main, master, develop, etc.)
+PREVENT_MAIN_FORCE_PUSH=true
+
+# Enable debug statement checking during push with interactive prompt
+CHECK_DEBUGS=false
+
+# Run tests automatically before push (if test frameworks are detected)
+RUN_TESTS_ON_PUSH=true
+
+# Test command for npm projects (runs when package.json has test script)
+NPM_TEST_COMMAND="npm test"
+
+# Test command for Python projects (runs when pytest is available)
+PYTHON_TEST_COMMAND="python3 -m pytest"
+
+# Test command for Make-based projects (runs when Makefile exists)
+MAKE_TEST_COMMAND="make test"
+
+# Maximum time to wait for tests to complete (in seconds)
+TEST_TIMEOUT=300
+
+# =============================================================================
+# VERSIONING SETTINGS
+# Automatic semantic versioning based on conventional commit messages
+# Only triggers when pushing to configured branches (prevents version pollution)
+# =============================================================================
+
+# Use commit message patterns to determine version bump type
+# feat: -> minor bump (1.0.0 -> 1.1.0)
+# fix: -> patch bump (1.0.0 -> 1.0.1)
+# BREAKING: -> major bump (1.0.0 -> 2.0.0)
+VERSION_BUMP_PATTERNS=true
+
+# Initial version for first push to main/master (when no tags exist)
+# Set to "1.0.0" for production-ready first release
+# Set to "0.1.0" for development/experimental first release
+INITIAL_VERSION="1.0.0"
+
+# How to skip versioning:
+# Method 1: Use wrapper script: ./git-push-wrapper.sh --skip-version origin main
+# Method 2: Add [skip version] to commit message
+# Method 3: Temporarily set AUTO_VERSION_BUMP=false
+
+# =============================================================================
+# POST-COMMIT HOOK SETTINGS
+# =============================================================================
+
+# Enable automatic changelog generation after commits
+AUTO_CHANGELOG=true
+
+# Name of the changelog file to generate/update
+CHANGELOG_FILE="CHANGELOG.md"
+
+# Date format for changelog entries (see 'man date' for format options)
+CHANGELOG_DATE_FORMAT="%Y-%m-%d"
+
+# Git log format for changelog entries (see 'man git-log' for format options)
+CHANGELOG_COMMIT_FORMAT="format:%s"
+
+# Branches that trigger changelog updates (pipe-separated regex)
+# Only commits to these branches will update the changelog
+# This prevents feature branch commits from cluttering the changelog
+CHANGELOG_BRANCHES="main|master"
+
+# =============================================================================
+# PREPARE-COMMIT-MSG HOOK SETTINGS
+# =============================================================================
+
+# Enable automatic ticket number extraction from branch names (adds ticket ID to commit message)
+AUTO_TICKET_PREFIX=true
+
+# Regex pattern for extracting ticket numbers from branch names (e.g., JIRA-123)
+TICKET_PATTERN="[A-Z]+-[0-9]+"
+
+# Branches to skip ticket prefix extraction (pipe-separated)
+SKIP_TICKET_BRANCHES="main|master|develop|staging|production"
+
+# =============================================================================
+# PRE-MERGE-COMMIT HOOK SETTINGS
+# Automatic squash merging of feature branches
+# =============================================================================
+
+# Enable automatic squash merging for feature branches
+AUTO_SQUASH=true
+
+# Regex patterns for feature branches that should be squash merged
+FEATURE_BRANCH_PATTERNS="^(feature|feat|bugfix|hotfix|fix)/"
+
+# Template for squash commit messages (variables: {feature_name}, {description}, {branch_name})
+SQUASH_COMMIT_TEMPLATE="Add {description}"
+
+# Prompt user for custom commit message during squash merge
+PROMPT_FOR_MESSAGE=true
+
+# Automatically delete merged feature branch (true/false/prompt)
+DELETE_MERGED_BRANCH=false
+
+# Target branches that allow squash merging (pipe-separated regex)
+ALLOWED_TARGET_BRANCHES="main|master|develop"
+
+# =============================================================================
+# POST-MERGE HOOK SETTINGS
+# =============================================================================
+
+# Automatically update hooks after merge if hook files changed
+AUTO_UPDATE_HOOKS=true
+
+# Show dependency update suggestions after merge (when package files change)
+SUGGEST_DEPENDENCY_UPDATES=true
+
+# Package files to monitor for changes (pipe-separated)
+PACKAGE_FILES="package.json|package-lock.json|yarn.lock|requirements.txt|Pipfile|Gemfile|composer.json"
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+
+# Enable verbose output from hooks (shows detailed execution information)
+VERBOSE_OUTPUT=false
+
+# Enable colored output (disable for CI/CD environments that don't support colors)
+COLOR_OUTPUT=true
+
+# Maximum time to wait for any hook to complete (in seconds, 0 = no timeout)
+HOOK_TIMEOUT=60
+
+# Skip interactive prompts (useful for CI/CD environments)
+NON_INTERACTIVE=false
+
+# Directory for custom hook scripts (relative to repository root)
+CUSTOM_SCRIPTS_DIR="scripts/git-hooks"
+
+# =============================================================================
+# PLATFORM-SPECIFIC SETTINGS
+# =============================================================================
+
+# Windows compatibility mode (auto-detects Windows if not specified)
+WINDOWS_MODE=auto
+
+# Prefer GNU tools over BSD tools on macOS (if GNU tools are installed)
+PREFER_GNU_TOOLS=false
+
+# Path to alternative shell for hook execution (empty = use system default)
+HOOK_SHELL=""
+
+# =============================================================================
+# LOGGING AND DEBUGGING
+# =============================================================================
+
+# Log file for hook execution (empty = no file logging, logs go to terminal only)
+HOOK_LOG_FILE=""
+
+# Enable debug mode (very verbose output for troubleshooting hook issues)
+DEBUG_MODE=false
+
+# Enable performance profiling (shows execution times for each hook operation)
+PROFILE_HOOKS=false
+
+# Installation metadata (auto-generated)
+HOOKS_VERSION=2.0
+INSTALL_DATE=2025-08-22T08:34:16Z
+INSTALLED_HOOKS="pre-commit commit-msg prepare-commit-msg pre-push post-commit post-merge pre-merge-commit"
+BACKUP_DIR=".git/hooks-backup-20250822-140416"
