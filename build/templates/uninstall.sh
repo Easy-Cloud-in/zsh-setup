@@ -7,10 +7,10 @@ set -e
 echo "🧹 Uninstalling Zsh Setup..."
 
 # Run the main uninstall script
-if [[ -f ./uninstall.sh ]]; then
-    ./uninstall.sh
+if [[ -f ./zsh-setup-uninstall.sh ]]; then
+    ./zsh-setup-uninstall.sh
 else
-    echo "⚠️ uninstall.sh not found in the current directory."
+    echo "⚠️ zsh-setup-uninstall.sh not found in the current directory."
 fi
 
 # Optionally restore previous .zshrc backup if it exists

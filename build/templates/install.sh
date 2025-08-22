@@ -14,9 +14,9 @@ chmod +x *.sh
 echo "🔤 Installing recommended fonts..."
 ./install_fonts.sh
 
-# Run the main setup script for Zsh, Oh My Zsh, Oh My Posh, and plugins
+# Run the main setup script for Zsh, Oh My Zsh, Oh My Posh, and plugins, forwarding all flags
 echo "🛠️ Running main setup script..."
-./zsh_oh_my_posh_setup.sh
+./zsh_oh_my_posh_setup.sh "$@"
 
 echo ""
 echo "✅ Installation complete!"

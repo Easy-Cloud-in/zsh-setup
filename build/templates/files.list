@@ -8,7 +8,7 @@ zsh_oh_my_posh_setup.sh:zsh_oh_my_posh_setup.sh
 install_fonts.sh:install_fonts.sh
 change_posh_theme.sh:change_posh_theme.sh
 example.zshrc:example.zshrc
-uninstall.sh:uninstall.sh
+zsh-setup-uninstall.sh:zsh-setup-uninstall.sh
 
 # Documentation and legal
 LICENSE:LICENSE

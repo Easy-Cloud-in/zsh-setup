@@ -62,6 +62,34 @@ zsh
 
 ---
 
+### Install from Zip Release
+
+If you downloaded a release zip from GitHub:
+
+```bash
+unzip zsh-setup-v*.zip
+cd zsh-setup-*/
+chmod +x install.sh
+./install.sh
+```
+
+To uninstall, run:
+```bash
+./uninstall.sh
+```
+
+For advanced/manual uninstallation, you can run:
+```bash
+./zsh-setup-uninstall.sh
+```
+
+The `install.sh` script automates the full setup process—fonts, Zsh, Oh My Zsh, Oh My Posh, and recommended plugins.  
+No manual steps required—just run the installer!
+
+See the main README for the latest release links and details on advanced/manual uninstallation.
+
+---
+
 ## Script Flags & Options
 
 All scripts support flags for automation, safety, and advanced usage.

@@ -19,6 +19,37 @@ chmod +x *.sh
 ./zsh_oh_my_posh_setup.sh
 ```
 
+## Install from Zip Release
+
+You can install zsh-setup directly from a GitHub release zip package:
+
+```bash
+# Download the latest release from GitHub
+wget https://github.com/Easy-Cloud-in/zsh-setup/releases/download/v1.0.0/zsh-setup-v1.0.0.zip
+
+# Unzip and enter the directory
+unzip zsh-setup-v1.0.0.zip
+cd zsh-setup-*/
+
+# Run the installer script
+chmod +x install.sh
+./install.sh
+```
+
+To uninstall, run:
+```bash
+./uninstall.sh
+```
+
+For advanced/manual uninstallation, you can run:
+```bash
+./zsh-setup-uninstall.sh
+```
+
+The `install.sh` script will set up fonts, Zsh, Oh My Zsh, Oh My Posh, and recommended plugins automatically.
+
+See [User Manual](USER_MANUAL.md) for more details.
+
 For more details, advanced usage, flags, troubleshooting, and customization, see the [User Manual](USER_MANUAL.md).
 
 ## Documentation & Support
