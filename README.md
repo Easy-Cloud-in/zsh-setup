@@ -186,6 +186,20 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and updates.
 
 ## Troubleshooting
 
+## FAQ
+
+**Q: How do I restore a previous .zshrc backup?**  
+A: Use: `cp ~/.zshrc.backup.* ~/.zshrc` and then `source ~/.zshrc`
+
+**Q: How do I run a dry-run to preview changes?**  
+A: Run `./zsh_oh_my_posh_setup.sh --dry-run` to see changes without applying them.
+
+**Q: Can I skip font installation?**  
+A: Yes, use `--no-prompt` flag with the setup script.
+
+**Q: How do I enable NVM support in Oh My Posh?**  
+A: Install NVM separately and ensure it's in your $PATH. The theme must include the NVM segment.
+
 ### Font Issues
 
 - Make sure Nerd Fonts are installed correctly
@@ -319,23 +333,26 @@ To run the setup script:
 
 **Available Options:**
 
-*   `-h`, `--help`: Show the help message and exit.
-*   `-f`, `--force`: Force reinstallation of Zsh, Oh My Zsh, Oh My Posh, and plugins, even if they seem to be installed already. This also overwrites the existing `.zshrc` backup.
-*   `--update-rc`: Only update the `~/.zshrc` configuration file. Skips installation checks and plugin updates. Useful for quickly applying changes to the `.zshrc` template or switching themes without reinstalling components.
+- `-h`, `--help`: Show the help message and exit.
+- `-f`, `--force`: Force reinstallation of Zsh, Oh My Zsh, Oh My Posh, and plugins, even if they seem to be installed already. This also overwrites the existing `.zshrc` backup.
+- `--update-rc`: Only update the `~/.zshrc` configuration file. Skips installation checks and plugin updates. Useful for quickly applying changes to the `.zshrc` template or switching themes without reinstalling components.
 
 **Example:**
 
 Run the full setup:
+
 ```bash
 ./zsh_oh_my_posh_setup.sh
 ```
 
 Force a full reinstall/reconfiguration:
+
 ```bash
 ./zsh_oh_my_posh_setup.sh --force
 ```
 
 Only update the `.zshrc` file (e.g., after modifying the script or to change themes):
+
 ```bash
 ./zsh_oh_my_posh_setup.sh --update-rc
 ```

@@ -1,10 +1,18 @@
 #!/bin/bash
 
+LOG_FILE=~/.zsh-setup.log
+mkdir -p "$(dirname "$LOG_FILE")" || true
+touch "$LOG_FILE" || true
+chmod 600 "$LOG_FILE" || true
+
 # Exit on error, undefined vars, and pipe failures
 set -euo pipefail
 
 # Error handler
-trap 'echo "Error on line $LINENO. Previous command exited with status $?"' ERR
+trap '{
+    echo "Error on line $LINENO. Previous command exited with status $?" >&2
+    echo "Error on line $LINENO. Previous command exited with status $?" >> "$LOG_FILE"
+}' ERR
 
 # Add debug output if needed
 # set -x
@@ -38,6 +46,14 @@ parse_arguments() {
                 ;;
             --update-rc)
                 UPDATE_RC=true
+                shift
+                ;;
+            --dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            --no-prompt)
+                NO_PROMPT=true
                 shift
                 ;;
             -h|--help)
@@ -83,9 +99,21 @@ install_search_utilities() {
     local install_fd="n"
 
     log "$YELLOW" "Install optional search utilities?"
+    if [ "$NO_PROMPT" != true ]; then
     read -p "  Install fzf (fuzzy finder)? (y/N): " install_fzf
+else
+    install_fzf="y"
+fi
+    if [ "$NO_PROMPT" != true ]; then
     read -p "  Install ripgrep (rg - fast grep)? (y/N): " install_rg
+else
+    install_rg="y"
+fi
+    if [ "$NO_PROMPT" != true ]; then
     read -p "  Install fd (fd-find - fast find)? (y/N): " install_fd
+else
+    install_fd="y"
+fi
 
     # Install fzf
     if [[ "$install_fzf" =~ ^[Yy]$ ]]; then
@@ -154,8 +182,12 @@ backup_zshrc() {
 install_zsh() {
     if ! command -v zsh > /dev/null || [ "$FORCE_UPDATE" = true ]; then
         log "$BLUE" "Installing/Updating Zsh..."
+    if [ "$DRY_RUN" != true ]; then
         sudo apt update -y
         sudo apt install -y zsh
+    else
+        log "$YELLOW" "Dry run: Skipping apt install of Zsh."
+    fi
     else
         log "$GREEN" "Zsh is already installed."
     fi
