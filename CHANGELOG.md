@@ -1,3 +1,9 @@
+## [v1.0.1] - 2025-08-22
+
+### Changes
+- fix: the path issue in the package.sh
+
+
 ## [v1.0.0] - 2025-08-22
 
 ### Initial Release
