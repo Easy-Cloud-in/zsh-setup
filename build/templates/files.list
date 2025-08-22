@@ -1,0 +1,24 @@
+zsh-setup/build/templates/files.list
+# Distribution Files List for zsh-setup
+# Format: source_path:destination_path
+# Lines starting with # are comments
+
+# Core setup scripts
+zsh_oh_my_posh_setup.sh:zsh_oh_my_posh_setup.sh
+install_fonts.sh:install_fonts.sh
+change_posh_theme.sh:change_posh_theme.sh
+example.zshrc:example.zshrc
+uninstall.sh:uninstall.sh
+
+# Documentation and legal
+LICENSE:LICENSE
+README.md:README.md
+USER_MANUAL.md:USER_MANUAL.md
+CHANGELOG.md:CHANGELOG.md
+
+# Distribution installer and uninstaller
+build/templates/install.sh:install.sh
+build/templates/uninstall.sh:uninstall.sh
+
+# Distribution README
+build/templates/README.md:README.md

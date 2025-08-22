@@ -5,6 +5,20 @@ mkdir -p "$(dirname "$LOG_FILE")" || true
 touch "$LOG_FILE" || true
 chmod 600 "$LOG_FILE" || true
 
+# Disk space and network checks (minimum 100MB, github.com reachable)
+check_disk_and_network() {
+    local avail_space
+    avail_space=$(df "$HOME" | awk 'NR==2 {print $4}')
+    if [ "$avail_space" -lt 102400 ]; then
+        echo "Insufficient disk space. At least 100MB required in $HOME." | tee -a "$LOG_FILE"
+        exit 1
+    fi
+    if ! ping -c 1 github.com &>/dev/null; then
+        echo "Network check failed. Cannot reach github.com. Please check your internet connection." | tee -a "$LOG_FILE"
+        exit 1
+    fi
+}
+
 # Exit on error, undefined vars, and pipe failures
 set -euo pipefail
 
@@ -12,6 +26,18 @@ set -euo pipefail
 trap '{
     echo "Error on line $LINENO. Previous command exited with status $?" >&2
     echo "Error on line $LINENO. Previous command exited with status $?" >> "$LOG_FILE"
+    # Rollback prompt on error
+    if [ -f ~/.zshrc.backup.* ]; then
+        echo "An error occurred. Would you like to rollback and restore your previous .zshrc backup? (y/n): "
+        read -r rollback_confirm
+        if [[ "$rollback_confirm" =~ ^[Yy]$ ]]; then
+            latest_backup=$(ls -t ~/.zshrc.backup.* | head -n 1)
+            cp "$latest_backup" ~/.zshrc
+            echo "Rollback complete. Restored from $latest_backup" | tee -a "$LOG_FILE"
+        else
+            echo "Rollback skipped. Manual restoration is possible from ~/.zshrc.backup.*" | tee -a "$LOG_FILE"
+        fi
+    fi
 }' ERR
 
 # Add debug output if needed
@@ -34,6 +60,7 @@ log() {
     local color=$1
     local message=$2
     echo -e "${color}${message}${NC}"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $message" >> "$LOG_FILE"
 }
 
 # Add argument parsing
@@ -56,6 +83,10 @@ parse_arguments() {
                 NO_PROMPT=true
                 shift
                 ;;
+            --self-check|--test)
+                SELF_CHECK=true
+                shift
+                ;;
             -h|--help)
                 show_help
                 exit 0
@@ -75,7 +106,10 @@ show_help() {
     echo
     echo "Options:"
     echo "  -f, --force       Force reinstallation/reconfiguration of all components."
-    echo "  --update-rc     Only update the ~/.zshrc configuration file based on the selected theme."
+    echo "  --update-rc       Only update the ~/.zshrc configuration file based on the selected theme."
+    echo "  --dry-run         Preview changes without applying them."
+    echo "  --no-prompt       Run non-interactively (for automation)."
+    echo "  --self-check      Run environment and config self-checks."
     echo "  -h, --help        Show this help message."
     echo
     echo "This script installs and configures Zsh, Oh My Zsh, Oh My Posh, and recommended plugins."
@@ -90,6 +124,8 @@ check_requirements() {
             sudo apt update && sudo apt install -y "$cmd"
         fi
     done
+    # Disk and network checks before proceeding
+    check_disk_and_network
 }
 
 # Add new function to install fzf and related utilities
@@ -175,6 +211,7 @@ backup_zshrc() {
         local backup_file=~/.zshrc.backup.$(date +%Y%m%d_%H%M%S)
         log "$BLUE" "Creating backup of existing .zshrc to $backup_file"
         cp ~/.zshrc "$backup_file"
+        log "$GREEN" "Backup created at $backup_file"
     fi
 }
 
@@ -194,13 +231,13 @@ install_zsh() {
 
     # Clean up and normalize /etc/shells
     log "$BLUE" "Cleaning up duplicate shell entries..."
-    
+
     # Create a temporary file
     TEMP_SHELLS=$(mktemp)
-    
+
     # Add header
     echo "# /etc/shells: valid login shells" > "$TEMP_SHELLS"
-    
+
     # Add unique shell entries
     {
         echo "/bin/sh"
@@ -240,14 +277,14 @@ install_zsh() {
     if [ "$SHELL" != "$zsh_path" ]; then
         log "$BLUE" "Setting Zsh as default shell..."
         chsh -s "$zsh_path" "$USER"
-        
+
         log "$YELLOW" "⚠️  Zsh has been set as your default shell."
         log "$YELLOW" "Please log out and log back in for the change to take effect."
         log "$YELLOW" "Alternatively, you can run 'zsh' now to switch to Zsh for the current session."
     else
         log "$GREEN" "Zsh is already the default shell."
     fi
-    
+
     log "$GREEN" "Zsh setup completed."
 }
 
@@ -258,17 +295,17 @@ install_oh_my_zsh() {
             log "$BLUE" "Removing existing Oh My Zsh installation..."
             rm -rf "$HOME/.oh-my-zsh"
         fi
-        
+
         # Create a minimal .zshrc first to prevent the new user setup
         log "$BLUE" "Creating initial .zshrc..."
         echo "# Initial .zshrc to prevent new user setup" > "$HOME/.zshrc"
-        
+
         log "$BLUE" "Installing Oh My Zsh..."
         # Use RUNZSH=no to prevent automatic shell switch
         export RUNZSH=no
         # Use --unattended and --keep-zshrc flags
         sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --keep-zshrc
-        
+
         if [ $? -ne 0 ]; then
             log "$RED" "Oh My Zsh installation failed!"
             exit 1
@@ -292,9 +329,9 @@ install_oh_my_posh() {
 # Modified setup_themes function
 setup_themes() {
     local THEMES_DIR="$HOME/.oh-my-posh-themes"
-    
+
     log "$BLUE" "Setting up themes in directory: $THEMES_DIR"
-    
+
     # Create themes directory if it doesn't exist
     if [ ! -d "$THEMES_DIR" ]; then
         mkdir -p "$THEMES_DIR"
@@ -306,7 +343,7 @@ setup_themes() {
     wget -q https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip -O "$THEMES_DIR/themes.zip"
     unzip -q -o "$THEMES_DIR/themes.zip" -d "$THEMES_DIR"
     rm "$THEMES_DIR/themes.zip"
-    
+
     # Verify themes were downloaded
     local theme_count=$(find "$THEMES_DIR" -name "*.json" -type f | wc -l)
     log "$GREEN" "✨ Downloaded $theme_count themes successfully!\n"
@@ -316,15 +353,15 @@ setup_themes() {
 install_plugins() {
     local plugins_dir="${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins"
     local install_status=0
-    
+
     mkdir -p "$plugins_dir"
-    
+
     # Helper function to install or update a plugin
     install_or_update_plugin() {
         local plugin_name=$1
         local plugin_url=$2
         local plugin_dir="$plugins_dir/$plugin_name"
-        
+
         if [ ! -d "$plugin_dir" ]; then
             log "$BLUE" "Installing $plugin_name..."
             if git clone --quiet "$plugin_url" "$plugin_dir" 2>/dev/null; then
@@ -343,13 +380,13 @@ install_plugins() {
             fi
         fi
     }
-    
+
     # Install plugins in the correct order
     install_or_update_plugin "zsh-completions" "https://github.com/zsh-users/zsh-completions"
     install_or_update_plugin "fzf-tab" "https://github.com/Aloxaf/fzf-tab"
     install_or_update_plugin "zsh-autosuggestions" "https://github.com/zsh-users/zsh-autosuggestions"
     install_or_update_plugin "zsh-syntax-highlighting" "https://github.com/zsh-users/zsh-syntax-highlighting"
-    
+
     return $install_status
 }
 
@@ -524,13 +561,13 @@ EOL
 # Add this new function after install_plugins() function
 migrate_bash_environment() {
     log "$BLUE" "Migrating bash environment to zsh..."
-    
+
     # Create a temporary file to store environment variables
     local temp_env_file="/tmp/zsh_env_migration"
-    
+
     # Clear the temp file if it exists
     > "$temp_env_file"
-    
+
     # Extract environment setup from bash files with more comprehensive patterns
     for file in ~/.bashrc ~/.bash_profile ~/.profile; do
         if [ -f "$file" ]; then
@@ -539,10 +576,10 @@ migrate_bash_environment() {
             grep -E '^[[:space:]]*(export|PATH=|alias)' "$file" >> "$temp_env_file"
         fi
     done
-    
+
     # Remove existing environment section if it exists
     sed -i '/# BEGIN BASH MIGRATION/,/# END BASH MIGRATION/d' ~/.zshrc
-    
+
     # Add the new environment section
     cat <<'EOL' >> ~/.zshrc
 
@@ -596,7 +633,7 @@ fi
 
 # Custom environment variables from bash (filtered)
 EOL
-    
+
     # Append filtered environment variables from bash
     if [ -s "$temp_env_file" ]; then
         log "$BLUE" "Adding compatible environment variables..."
@@ -607,23 +644,23 @@ EOL
             fi
         done
     fi
-    
+
     # Create a new aliases file if it doesn't exist
     if [ ! -f ~/.aliases ]; then
         touch ~/.aliases
         # Extract aliases from .bashrc and add them to .aliases
         grep -E '^[[:space:]]*alias' ~/.bashrc 2>/dev/null >> ~/.aliases
     fi
-    
+
     echo "# END BASH MIGRATION" >> ~/.zshrc
-    
+
     # Clean up
     rm -f "$temp_env_file"
-    
+
     # Fix permissions
     chmod 600 ~/.zshrc
     chmod 600 ~/.aliases
-    
+
     log "$GREEN" "Environment migration completed!"
 }
 
@@ -631,10 +668,10 @@ EOL
 preview_theme() {
     local theme_path=$1
     local theme_name=$(basename "$theme_path")
-    
+
     log "$BLUE" "\nPreviewing theme: $theme_name"
     log "$YELLOW" "Preview will last for 5 seconds..."
-    
+
     # Create a temporary script
     local temp_script=$(mktemp)
     cat << EOF > "$temp_script"
@@ -668,17 +705,17 @@ echo "\n━━━━━━━━━━━━━━━━━━━━━━━━
 echo "Press Enter to return to theme selection..."
 read
 EOF
-    
+
     # Make the script executable
     chmod +x "$temp_script"
-    
+
     # Run the preview in interactive mode
     zsh -i "$temp_script"
-    
+
     # Clean up
     rm "$temp_script"
     clear
-    
+
     return 0
 }
 
@@ -688,17 +725,17 @@ select_theme() {
     local themes=($(find "$THEMES_DIR" -name "*.json" -type f | sort))
     local columns=3  # Number of columns to display
     local width=30   # Width of each column
-    
+
     # Clear screen for better presentation
     clear
-    
+
     log "$BLUE" "\n📚 Oh My Posh Theme Selection"
     log "$YELLOW" "══════════════════════════════════════════════════════════════"
-    
+
     # Calculate total themes and rows
     local total=${#themes[@]}
     local rows=$(( (total + columns - 1) / columns ))
-    
+
     # Display themes in columns with padding
     for ((i = 0; i < rows; i++)); do
         for ((j = 0; j < columns; j++)); do
@@ -711,7 +748,7 @@ select_theme() {
         done
         echo  # New line after each row
     done
-    
+
     log "$YELLOW" "══════════════════════════════════════════════════════════════"
     log "$BLUE" "\n🎨 Options:"
     echo "  • Enter a number (1-$total) to select a theme"
@@ -719,13 +756,13 @@ select_theme() {
     echo "  • Enter 'q' to quit"
     echo
     read -p "💫 Your choice: " choice
-    
+
     # Rest of the selection logic remains the same
     if [[ "$choice" == "q" ]]; then
         log "$RED" "Theme selection cancelled."
         exit 1
     fi
-    
+
     if [[ "$choice" =~ ^p[0-9]+$ ]]; then
         number=${choice:1}
         if ((number >= 1 && number <= total)); then
@@ -736,13 +773,13 @@ select_theme() {
         fi
         return
     fi
-    
+
     if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= total)); then
         selected_theme="${themes[choice-1]}"
         theme_name=$(basename "$selected_theme" .omp.json)
         log "$YELLOW" "\n✨ You selected: $theme_name"
         read -p "📝 Do you want to apply this theme? (y/n): " confirm
-        
+
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
             echo "$selected_theme"
             return
@@ -792,21 +829,21 @@ main() {
     # --- Theme Selection and .zshrc Configuration (Common to all modes) ---
     # Clear screen before showing themes
     clear
-    
+
     # Show themes and get selection
     while true; do
         local THEMES_DIR="$HOME/.oh-my-posh-themes"
         local themes=($(find "$THEMES_DIR" -name "*.json" -type f | sort))
         local columns=3
         local width=30
-        
+
         log "$BLUE" "\n📚 Oh My Posh Theme Selection"
         log "$YELLOW" "══════════════════════════════════════════════════════════════"
-        
+
         # Calculate total themes and rows
         local total=${#themes[@]}
         local rows=$(( (total + columns - 1) / columns ))
-        
+
         # Display themes in columns with padding
         for ((i = 0; i < rows; i++)); do
             for ((j = 0; j < columns; j++)); do
@@ -818,7 +855,7 @@ main() {
             done
             echo
         done
-        
+
         log "$YELLOW" "══════════════════════════════════════════════════════════════"
         log "$BLUE" "\n🎨 Options:"
         echo "  • Enter a number (1-$total) to select a theme"
@@ -826,13 +863,13 @@ main() {
         echo "  • Enter 'q' to quit"
         echo
         read -p "💫 Your choice: " choice
-        
+
         # Handle selection
         if [[ "$choice" == "q" ]]; then
             log "$RED" "Theme selection cancelled."
             exit 1
         fi
-        
+
         if [[ "$choice" =~ ^p[0-9]+$ ]]; then
             number=${choice:1}
             if ((number >= 1 && number <= total)); then
@@ -843,13 +880,13 @@ main() {
             fi
             continue
         fi
-        
+
         if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= total)); then
             selected_theme="${themes[choice-1]}"
             theme_name=$(basename "$selected_theme" .omp.json)
             log "$YELLOW" "\n✨ You selected: $theme_name"
             read -p "📝 Do you want to apply this theme? (y/n): " confirm
-            
+
             if [[ "$confirm" =~ ^[Yy]$ ]]; then
                 configure_zshrc "$THEMES_DIR" "$(basename "$selected_theme")"
                 log "$GREEN" "✅ Setup completed successfully!"

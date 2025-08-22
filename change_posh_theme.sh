@@ -3,6 +3,18 @@
 # Set strict error handling
 set -euo pipefail
 
+# Log file for errors and actions
+LOG_FILE="$HOME/.zsh-setup.log"
+mkdir -p "$(dirname "$LOG_FILE")" || true
+touch "$LOG_FILE" || true
+chmod 600 "$LOG_FILE" || true
+
+# Error handler: log to file and stderr
+trap '{
+    echo "Error on line $LINENO. Previous command exited with status $?" >&2
+    echo "Error on line $LINENO. Previous command exited with status $?" >> "$LOG_FILE"
+}' ERR
+
 # Define colors for better readability
 readonly RED='\033[1;31m'
 readonly GREEN='\033[1;32m'
@@ -10,11 +22,12 @@ readonly BLUE='\033[1;34m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
 
-# Helper function for colored output
+# Helper function for colored output and logging
 log() {
     local color=$1
     local message=$2
     echo -e "${color}${message}${NC}"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $message" >> "$LOG_FILE"
 }
 
 # Directory where Oh My Posh themes are stored
@@ -24,6 +37,7 @@ readonly ZSHRC_FILE="$HOME/.zshrc"
 readonly ZSHRC_BACKUP="$HOME/.zshrc.backup" # Fixed backup file name
 readonly OMP_MARKER_START="# --- Oh My Posh Theme Start ---"
 readonly OMP_MARKER_END="# --- Oh My Posh Theme End ---"
+readonly BACKUP_CONFIRM_PROMPT="Do you want to create a backup of your current .zshrc before applying a new theme? (y/n): "
 
 # Function to check dependencies
 check_dependencies() {
@@ -35,6 +49,20 @@ check_dependencies() {
     if [ ${#missing_deps[@]} -ne 0 ]; then
         log "$RED" "Error: Missing dependencies: ${missing_deps[*]}"
         log "$YELLOW" "Please install the missing dependencies and try again."
+        exit 1
+    fi
+
+    # Check disk space (minimum 100MB required)
+    local available_space
+    available_space=$(df "$HOME" | awk 'NR==2 {print $4}')
+    if (( available_space < 102400 )); then
+        log "$RED" "Insufficient disk space. At least 100MB required."
+        exit 1
+    fi
+
+    # Check network connectivity
+    if ! ping -c 1 github.com &>/dev/null; then
+        log "$RED" "Network connectivity check failed. Please check your internet connection."
         exit 1
     fi
 }
@@ -71,6 +99,7 @@ check_themes_dir() {
 
 # Function to get the last installed theme from .zshrc using markers
 get_last_installed_theme() {
+    # Idempotency: Only show last theme if markers exist
     if [ ! -f "$ZSHRC_FILE" ]; then
         log "$YELLOW" "\n⚠️ .zshrc file not found. Cannot determine last theme."
         return
@@ -113,10 +142,10 @@ list_themes() {
 preview_theme() {
     local theme_path=$1
     local theme_name=$(basename "$theme_path")
-    
+
     log "$BLUE" "\nPreviewing theme: $theme_name"
     log "$YELLOW" "Preview will last for $PREVIEW_TIME seconds..."
-    
+
     # Temporarily apply theme
     eval "$(oh-my-posh init zsh --config "$theme_path")"
     sleep "$PREVIEW_TIME"
@@ -150,11 +179,13 @@ apply_theme() {
         $0 == end {p=0}
     ' "$ZSHRC_FILE" > "$temp_file" && mv "$temp_file" "$ZSHRC_FILE"
 
-    # Add new theme configuration with markers
+    # Add new theme configuration with markers (idempotent: only one block)
     log "$BLUE" "Applying new theme: $theme_name..."
     {
         echo "$OMP_MARKER_START"
+        echo "# BEGIN: Oh My Posh theme block (auto-generated)"
         echo "eval \"\$(oh-my-posh init zsh --config '$theme_path')\""
+        echo "# END: Oh My Posh theme block"
         echo "$OMP_MARKER_END"
     } >> "$ZSHRC_FILE"
 
@@ -192,15 +223,15 @@ main() {
         echo "- Enter a number (1-$theme_count) to select a theme"
         echo "- Enter 'p' followed by a number to preview a theme (e.g., 'p1')"
         echo "- Enter 'q' to quit"
-        
+
         read -p "Your choice: " choice
-        
+
         # Handle quit
         if [[ "$choice" == "q" ]]; then
             log "$GREEN" "No changes made. Exiting..."
             exit 0
         fi
-        
+
         # Handle preview
         if [[ "$choice" =~ ^p[0-9]+$ ]]; then
             number=${choice:1}
@@ -209,14 +240,24 @@ main() {
                 continue
             fi
         fi
-        
+
         # Handle theme selection
         if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= theme_count)); then
             selected_theme="${themes[choice-1]}"
-            
+
             log "$YELLOW" "\nYou selected: $(basename "$selected_theme")"
+            # Backup confirmation prompt for safety
+            read -p "$BACKUP_CONFIRM_PROMPT" backup_confirm
+            if [[ "$backup_confirm" =~ ^[Yy]$ ]]; then
+                log "$BLUE" "Creating backup of $ZSHRC_FILE to $ZSHRC_BACKUP..."
+                cp "$ZSHRC_FILE" "$ZSHRC_BACKUP"
+                log "$GREEN" "Backup created at $ZSHRC_BACKUP"
+            else
+                log "$YELLOW" "Skipping backup as per user choice."
+            fi
+
             read -p "Do you want to apply this theme? (y/n): " confirm
-            
+
             if [[ "$confirm" =~ ^[Yy]$ ]]; then
                 apply_theme "$selected_theme"
                 break
@@ -229,4 +270,3 @@ main() {
 
 # Run main function
 main
-

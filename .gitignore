@@ -20,6 +20,8 @@ Thumbs.db
 
 # Logs
 *.log
+/tmp/
+dist/*.log
 
 # Environment files
 .env
@@ -27,12 +29,25 @@ Thumbs.db
 
 # Oh My Posh themes directory
 .oh-my-posh-themes/
+.poshthemes/
+~/.poshthemes/
 
 # Zsh generated files
 .zcompdump*
 .zsh_history
 .zsh_sessions/
 
-# Downloaded files
+# Downloaded and build artifacts
 *.zip
 *.tar.gz
+dist/
+build/staging/
+build/*.zip
+
+# Node/npm artifacts (if ever used)
+node_modules/
+npm-debug.log*
+
+# Misc
+*.tmp
+*.out

@@ -3,6 +3,17 @@
 # Set strict error handling
 set -euo pipefail
 
+# Error logging setup
+LOG_FILE=~/.zsh-setup.log
+mkdir -p "$(dirname "$LOG_FILE")" || true
+touch "$LOG_FILE" || true
+chmod 600 "$LOG_FILE" || true
+
+trap '{
+    echo "Error on line $LINENO. Previous command exited with status $?" >&2
+    echo "Error on line $LINENO. Previous command exited with status $?" >> "$LOG_FILE"
+}' ERR
+
 # Define colors for better readability
 readonly RED='\033[1;31m'
 readonly GREEN='\033[1;32m'
@@ -10,11 +21,12 @@ readonly BLUE='\033[1;34m'
 readonly YELLOW='\033[1;33m'
 readonly NC='\033[0m' # No Color
 
-# Helper function for colored output
+# Helper function for colored output and logging
 log() {
     local color=$1
     local message=$2
     echo -e "${color}${message}${NC}"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $message" >> "$LOG_FILE"
 }
 
 # Function to check if a command exists
@@ -111,7 +123,7 @@ remove_oh_my_posh() {
 # Function to remove Oh My Zsh
 remove_oh_my_zsh() {
     log "$BLUE" "Removing Oh My Zsh..."
-    
+
     if [ -d "$HOME/.oh-my-zsh" ]; then
         if [ -f "$HOME/.oh-my-zsh/tools/uninstall.sh" ]; then
             # Use ZSH_DISABLE_COMPFIX=true to avoid compfix errors during uninstallation
@@ -128,7 +140,7 @@ remove_oh_my_zsh() {
 # Function to remove Zsh plugins
 remove_zsh_plugins() {
     log "$BLUE" "Removing Zsh plugins..."
-    
+
     local plugins_dir="$HOME/.oh-my-zsh/custom/plugins"
     if [ -d "$plugins_dir" ]; then
         rm -rf "$plugins_dir/zsh-autosuggestions"
@@ -142,7 +154,7 @@ remove_zsh_plugins() {
     else
         log "$YELLOW" "Zsh plugins directory not found"
     fi
-    
+
     # Remove any standalone plugins
     rm -rf "$HOME/.zsh-autosuggestions"
     rm -rf "$HOME/.zsh-syntax-highlighting"
@@ -237,14 +249,14 @@ remove_powerlevel10k() {
 # Function to remove Zsh
 remove_zsh() {
     log "$BLUE" "Removing Zsh..."
-    
+
     if command_exists zsh; then
         # Change default shell back to bash before removing zsh
         if [ "$SHELL" = "$(command -v zsh)" ]; then
             log "$BLUE" "Changing default shell back to bash..."
             chsh -s "$(command -v bash)"
         fi
-        
+
         sudo apt remove -y zsh
         sudo apt autoremove -y
         log "$GREEN" "Zsh removed successfully"
@@ -397,38 +409,81 @@ cleanup_shell_entries() {
 main() {
     log "$YELLOW" "⚠️  Warning: This will remove Zsh, Oh My Posh, and all related configurations"
     log "$YELLOW" "    Your existing configurations will be backed up first"
-    read -p "Do you want to continue? (y/n): " confirm
-    
+
+    # Selective uninstall options
+    echo -e "${YELLOW}Select what you want to uninstall:${NC}"
+    echo "  1) Everything (Zsh, Oh My Posh, plugins, configs)"
+    echo "  2) Only Oh My Posh"
+    echo "  3) Only plugins"
+    echo "  4) Only Zsh"
+    echo "  5) Cancel"
+    read -p "Enter your choice [1-5]: " uninstall_choice
+
+    if [[ "$uninstall_choice" == "5" ]]; then
+        log "$BLUE" "Uninstallation cancelled"
+        exit 0
+    fi
+
+    # Confirm backup creation and location
+    log "$BLUE" "A backup of your configs will be created before any destructive actions."
+    read -p "Proceed with backup and uninstall? (y/n): " confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         log "$BLUE" "Uninstallation cancelled"
         exit 0
     fi
-    
+
     # Create backup
     backup_configs
-    
-    # Fix: Temporarily disable error handling for specific operations
+    local backup_dir="$HOME/zsh_backup_$(date +%Y%m%d_%H%M%S)"
+    log "$GREEN" "Backup created at: $backup_dir"
+
+    # Temporarily disable error handling for specific operations
     set +e
-    
-    # Clean up shell entries BEFORE removing zsh
-    cleanup_shell_entries
-    
-    # Remove components
-    remove_oh_my_posh
-    remove_zsh_plugins
-    remove_powerlevel10k
-    remove_oh_my_zsh
-    remove_fuzzy_search
-    remove_zsh
-    cleanup_configs
-    
+
+    # Clean up shell entries BEFORE removing zsh (if needed)
+    if [[ "$uninstall_choice" == "1" || "$uninstall_choice" == "4" ]]; then
+        cleanup_shell_entries
+    fi
+
+    # Remove components based on choice
+    local uninstall_success=true
+    if [[ "$uninstall_choice" == "1" ]]; then
+        remove_oh_my_posh || uninstall_success=false
+        remove_zsh_plugins || uninstall_success=false
+        remove_powerlevel10k || uninstall_success=false
+        remove_oh_my_zsh || uninstall_success=false
+        remove_fuzzy_search || uninstall_success=false
+        remove_zsh || uninstall_success=false
+        cleanup_configs || uninstall_success=false
+    elif [[ "$uninstall_choice" == "2" ]]; then
+        remove_oh_my_posh || uninstall_success=false
+    elif [[ "$uninstall_choice" == "3" ]]; then
+        remove_zsh_plugins || uninstall_success=false
+    elif [[ "$uninstall_choice" == "4" ]]; then
+        remove_zsh || uninstall_success=false
+        cleanup_configs || uninstall_success=false
+    fi
+
     # Re-enable error handling
     set -e
-    
-    log "$GREEN" "✨ Uninstallation completed successfully!"
+
+    # Rollback option if any uninstall step failed
+    if [[ "$uninstall_success" == "false" ]]; then
+        log "$RED" "Some uninstall steps failed. Would you like to rollback and restore your backup?"
+        read -p "Restore backup from $backup_dir? (y/n): " rollback_confirm
+        if [[ "$rollback_confirm" =~ ^[Yy]$ ]]; then
+            cp -r "$backup_dir/." "$HOME/"
+            log "$GREEN" "Rollback complete. Backup restored from $backup_dir."
+        else
+            log "$YELLOW" "Rollback skipped. Manual restoration is possible from $backup_dir."
+        fi
+    else
+        log "$GREEN" "✨ Uninstallation completed successfully!"
+    fi
+
     log "$YELLOW" "Please log out and log back in for the default shell change to take effect."
     log "$YELLOW" "Restarting your terminal window will reflect other removals (commands, files)."
-    log "$BLUE" "Your backup can be found in the directory: $HOME/zsh_backup_*"
+    log "$BLUE" "Your backup can be found in the directory: $backup_dir"
 }
 
 # Run main function
