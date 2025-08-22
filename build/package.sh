@@ -114,6 +114,12 @@ mkdir -p "$dist_dir"
 VERSION=$(grep -m 1 '^## \[v[0-9]' CHANGELOG.md | sed -E 's/^## \[v([0-9]+\.[0-9]+\.[0-9]+).*/\1/' || echo "1.0.0")
 
 # Copy files based on templates/files.list
+FILES_LIST="$SCRIPT_DIR/templates/files.list"
+if [[ ! -f "$FILES_LIST" ]]; then
+    echo "❌ Error: files.list not found at $FILES_LIST"
+    exit 1
+fi
+
 while IFS=':' read -r source_path dest_path || [[ -n "$source_path" ]]; do
     # Skip comments and empty lines
     [[ "$source_path" =~ ^[[:space:]]*# ]] && continue
@@ -124,7 +130,12 @@ while IFS=':' read -r source_path dest_path || [[ -n "$source_path" ]]; do
         dest_path="$(basename "$source_path")"
     fi
 
+    # Always resolve source path relative to project root
     full_source="$source_path"
+    if [[ ! -f "$full_source" ]]; then
+        # Try relative to SCRIPT_DIR/..
+        full_source="$SCRIPT_DIR/../$source_path"
+    fi
     full_dest="$dist_dir/$dest_path"
 
     # Create destination directory if needed
@@ -138,7 +149,7 @@ while IFS=':' read -r source_path dest_path || [[ -n "$source_path" ]]; do
         echo "❌ Error: Source file not found: $full_source"
         exit 1
     fi
-done < "$SCRIPT_DIR/templates/files.list"
+done < "$FILES_LIST"
 
 # Set proper permissions
 find "$dist_dir" -name "*.sh" -exec chmod +x {} \;
