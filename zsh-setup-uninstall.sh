@@ -115,8 +115,10 @@ remove_oh_my_posh() {
 
     if [ "$posh_removed" = true ]; then
         log "$GREEN" "Oh My Posh removed successfully"
+        return 0
     else
         log "$YELLOW" "Oh My Posh not found or already removed"
+        return 0
     fi
 }
 
@@ -303,7 +305,9 @@ cleanup_configs() {
      for item in "${zsh_dirs[@]}"; do
          # Handle wildcard matching for directories/files
          if compgen -G "$item" > /dev/null; then
-             rm -rf $item && cleaned_files=true
+             for found_item in $item; do
+                rm -rf "$found_item" && cleaned_files=true
+             done
          fi
      done
 
@@ -366,32 +370,13 @@ cleanup_shell_entries() {
     fi
 
     # Clean up and restore /etc/shells - This part is generally safe
-    log "$BLUE" "Verifying /etc/shells entries..."
-    local default_shells=(
-        "/bin/sh" "/bin/bash" "/usr/bin/bash" "/bin/rbash"
-        "/usr/bin/rbash" "/usr/bin/dash" "/bin/dash"
-        # We removed Zsh package, but let's ensure its paths are NOT in /etc/shells
-        # if they were added manually or by other means.
-        # We will add back standard shells if they exist.
-    )
+    # Clean up and restore /etc/shells - Using safer grep approach
+    log "$BLUE" "Removing Zsh entries from /etc/shells..."
     local temp_shells_file
     temp_shells_file=$(mktemp)
 
-    echo "# /etc/shells: valid login shells" > "$temp_shells_file"
-    for shell in "${default_shells[@]}"; do
-        if [ -x "$shell" ]; then # Check if the file exists and is executable
-            echo "$shell" >> "$temp_shells_file"
-        fi
-    done
-
-    # Ensure common zsh paths are NOT present unless zsh is still installed
-    if command_exists zsh; then
-         if [ -x "/bin/zsh" ]; then echo "/bin/zsh" >> "$temp_shells_file"; fi
-         if [ -x "/usr/bin/zsh" ]; then echo "/usr/bin/zsh" >> "$temp_shells_file"; fi
-    fi
-
-    # Sort and unique the list
-    sort -u "$temp_shells_file" -o "$temp_shells_file"
+    # Filter out anything containing 'zsh' from the existing file
+    grep -v "zsh" /etc/shells > "$temp_shells_file"
 
     # Check if changes are needed before writing
     if ! sudo cmp -s "$temp_shells_file" /etc/shells; then
