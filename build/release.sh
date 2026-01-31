@@ -30,10 +30,12 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
     exit 1
 fi
 
-# Check for uncommitted changes
-if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${RED}❌ Error: Working directory is not clean.${NC}"
+# Check for uncommitted changes (ignoring CHANGELOG.md)
+if [ -n "$(git status --porcelain | grep -v 'CHANGELOG.md')" ]; then
+    echo -e "${RED}❌ Error: Working directory is not clean (excluding CHANGELOG.md).${NC}"
     echo "   Please commit or stash your changes before releasing."
+    echo "   Uncommitted files:"
+    git status --porcelain | grep -v 'CHANGELOG.md'
     exit 1
 fi
 

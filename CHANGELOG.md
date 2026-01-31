@@ -22,3 +22,4 @@
 - fixed uninstall bugs
 - Updated Syntax error in script
 - version 1.0.1
+- 2026-01-31 feat: added a release script in the build
