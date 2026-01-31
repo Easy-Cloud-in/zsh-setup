@@ -1,3 +1,9 @@
+## [v1.1.1] - 2026-01-31
+
+### Changes
+- fix: release script hooks
+
+
 ## [v1.0.5] - 2026-01-31
 
 ### Changes
@@ -30,3 +36,4 @@
 - Updated Syntax error in script
 - version 1.0.1
 - 2026-01-31 feat: added a release script in the build
+- 2026-01-31 fix: release script hooks
