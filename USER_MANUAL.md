@@ -114,6 +114,7 @@ All scripts support flags for automation, safety, and advanced usage.
 ### Uninstall Script (`uninstall.sh`)
 
 - Selective uninstall options (everything, only Oh My Posh, only plugins, only Zsh)
+- **New!** "Uninstall specific plugins" option to interactively remove individual plugins
 - Prompts for backup and rollback on failure
 
 ---
@@ -136,6 +137,40 @@ All scripts support flags for automation, safety, and advanced usage.
 
 4. **Restart Terminal**
    - Run `zsh` or open a new terminal window
+
+---
+
+## Modern Tools Suite
+
+The setup script now includes an option to install a suite of modern, battle-tested CLI tools that enhance productivity:
+
+| Tool | Description | Aliases Configured |
+|------|-------------|-------------------|
+| **zoxide** | Smarter `cd` that learns your most used directories | `z`, `cd` |
+| **eza** | Modern replacement for `ls` with icons & git status | `ls`, `ll`, `la`, `lt` |
+| **bat** | `cat` clone with syntax highlighting | `cat` (optional) |
+| **delta** | Syntax-highlighting pager for git diffs | Configured in git |
+| **tldr** | Simplified, practical man pages | `tldr` |
+| **atuin** | (Optional) Magical shell history with sync | `Ctrl+r` replacement |
+
+During installation, you can choose to install **"Recommended (All)"** or pick specific tools.
+
+---
+
+## Modern Tools Suite
+
+The setup script now includes an option to install a suite of modern, battle-tested CLI tools that enhance productivity:
+
+| Tool | Description | Aliases Configured |
+|------|-------------|-------------------|
+| **zoxide** | Smarter `cd` that learns your most used directories | `z`, `cd` |
+| **eza** | Modern replacement for `ls` with icons & git status | `ls`, `ll`, `la`, `lt` |
+| **bat** | `cat` clone with syntax highlighting | `cat` (optional) |
+| **delta** | Syntax-highlighting pager for git diffs | Configured in git |
+| **tldr** | Simplified, practical man pages | `tldr` |
+| **atuin** | (Optional) Magical shell history with sync | `Ctrl+r` replacement |
+
+During installation, you can choose to install **"Recommended (All)"** or pick specific tools.
 
 ---
 

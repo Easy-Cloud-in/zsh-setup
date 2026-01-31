@@ -73,26 +73,27 @@ backup_configs() {
 remove_oh_my_posh() {
     log "$BLUE" "Removing Oh My Posh..."
 
-    local posh_removed=false
+    local clean=true
+    
     # Remove Oh My Posh binary
     if command_exists oh-my-posh; then
         if [ -f "/usr/local/bin/oh-my-posh" ]; then
-            sudo rm -f /usr/local/bin/oh-my-posh && posh_removed=true
+            sudo rm -f /usr/local/bin/oh-my-posh || clean=false
         fi
         if [ -f "/usr/bin/oh-my-posh" ]; then
-             sudo rm -f /usr/bin/oh-my-posh && posh_removed=true
+             sudo rm -f /usr/bin/oh-my-posh || clean=false
         fi
     fi
 
     # Remove themes and cache
     if [ -d "$HOME/.oh-my-posh-themes" ]; then
-        rm -rf "$HOME/.oh-my-posh-themes" && posh_removed=true
+        rm -rf "$HOME/.oh-my-posh-themes" || clean=false
     fi
     if [ -d "$HOME/.poshthemes" ]; then
-        rm -rf "$HOME/.poshthemes" && posh_removed=true
+        rm -rf "$HOME/.poshthemes" || clean=false
     fi
      if [ -d "$HOME/.cache/oh-my-posh" ]; then
-        rm -rf "$HOME/.cache/oh-my-posh" && posh_removed=true
+        rm -rf "$HOME/.cache/oh-my-posh" || clean=false
     fi
 
     # Remove init lines from shell configs
@@ -105,20 +106,19 @@ remove_oh_my_posh() {
             grep -v -E "(oh-my-posh|poshthemes)" "$file" > "$temp_file" || true
             # Check if temp file is different from original before moving
             if ! cmp -s "$temp_file" "$file"; then
-                mv "$temp_file" "$file"
-                posh_removed=true
+                mv "$temp_file" "$file" || clean=false
             else
                 rm "$temp_file" # No changes needed, remove temp file
             fi
         fi
     done
 
-    if [ "$posh_removed" = true ]; then
+    if [ "$clean" = true ]; then
         log "$GREEN" "Oh My Posh removed successfully"
         return 0
     else
-        log "$YELLOW" "Oh My Posh not found or already removed"
-        return 0
+        log "$YELLOW" "Some Oh My Posh components could not be removed."
+        return 1
     fi
 }
 
@@ -129,14 +129,18 @@ remove_oh_my_zsh() {
     if [ -d "$HOME/.oh-my-zsh" ]; then
         if [ -f "$HOME/.oh-my-zsh/tools/uninstall.sh" ]; then
             # Use ZSH_DISABLE_COMPFIX=true to avoid compfix errors during uninstallation
-            ZSH_DISABLE_COMPFIX=true sh "$HOME/.oh-my-zsh/tools/uninstall.sh" --yes
+            if ! ZSH_DISABLE_COMPFIX=true sh "$HOME/.oh-my-zsh/tools/uninstall.sh" --yes; then
+                log "$RED" "Oh My Zsh uninstall script failed."
+                return 1
+            fi
         else
-            rm -rf "$HOME/.oh-my-zsh"
+            rm -rf "$HOME/.oh-my-zsh" || return 1
         fi
         log "$GREEN" "Oh My Zsh removed successfully"
     else
         log "$YELLOW" "Oh My Zsh not found"
     fi
+    return 0
 }
 
 # Function to remove Zsh plugins
@@ -162,6 +166,103 @@ remove_zsh_plugins() {
     rm -rf "$HOME/.zsh-syntax-highlighting"
     rm -rf "$HOME/.fast-syntax-highlighting"
     rm -rf "$HOME/.zsh-completions"
+}
+
+# Function to remove specific plugins interactively
+remove_specific_plugins() {
+    log "$BLUE" "Scanning for installed plugins..."
+    local plugins_dir="$HOME/.oh-my-zsh/custom/plugins"
+    local plugins=()
+    
+    # Check OMZ plugins
+    if [ -d "$plugins_dir" ]; then
+        for d in "$plugins_dir"/*; do
+            if [ -d "$d" ]; then
+                plugins+=("$(basename "$d")")
+            fi
+        done
+    fi
+
+    # Check standalone plugins (common ones)
+    local standalone=("zsh-autosuggestions" "zsh-syntax-highlighting" "fast-syntax-highlighting" "zsh-completions")
+    for p in "${standalone[@]}"; do
+        if [ -d "$HOME/.$p" ]; then
+            plugins+=(".$p") # Mark with dot to indicate dotfile in home
+        fi
+    done
+
+    if [ ${#plugins[@]} -eq 0 ]; then
+        log "$YELLOW" "No custom plugins found to uninstall."
+        return 0
+    fi
+
+    log "$YELLOW" "Found ${#plugins[@]} plugins/extensions."
+    echo "Select plugins to uninstall (toggle with number, press Enter to confirm removal):"
+    
+    local selected=()
+    # Initialize selection array (false = not selected)
+    for ((i=0; i<${#plugins[@]}; i++)); do
+        selected[i]=false
+    done
+
+    while true; do
+        # Display list
+        for ((i=0; i<${#plugins[@]}; i++)); do
+            local status="[ ]"
+            if [ "${selected[i]}" = true ]; then
+                status="[${RED}x${NC}]"
+            else
+                status="[ ]"
+            fi
+            echo -e "$((i+1)). $status ${plugins[i]}"
+        done
+        echo "c. Confirm and Uninstall Selected"
+        echo "q. Cancel"
+        
+        read -p "Enter number to toggle, 'c' to confirm, 'q' to quit: " choice
+        
+        if [[ "$choice" == "q" ]]; then
+            log "$BLUE" "Operation cancelled."
+            return 0
+        elif [[ "$choice" == "c" ]]; then
+            break
+        elif [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#plugins[@]})); then
+            idx=$((choice-1))
+            if [ "${selected[idx]}" = true ]; then
+                selected[idx]=false
+            else
+                selected[idx]=true
+            fi
+            clear # Refresh list
+            log "$YELLOW" "Toggle selection for: ${plugins[idx]}"
+        else
+            echo "Invalid selection."
+        fi
+    done
+
+    # Process removal
+    local removal_count=0
+    for ((i=0; i<${#plugins[@]}; i++)); do
+        if [ "${selected[i]}" = true ]; then
+            local p_name="${plugins[i]}"
+            log "$BLUE" "Removing $p_name..."
+            
+            if [[ "$p_name" == .* ]]; then
+                # It's a dotfile plugin in $HOME
+                rm -rf "$HOME/$p_name"
+            else
+                # It's in OMZ custom plugins
+                rm -rf "$plugins_dir/$p_name"
+            fi
+            removal_count=$((removal_count+1))
+        fi
+    done
+
+    if [ $removal_count -gt 0 ]; then
+        log "$GREEN" "Successfully removed $removal_count plugins."
+    else
+        log "$YELLOW" "No plugins selected for removal."
+    fi
 }
 
 # Function to remove fuzzy search tools
@@ -249,6 +350,7 @@ remove_powerlevel10k() {
 }
 
 # Function to remove Zsh
+# Function to remove Zsh
 remove_zsh() {
     log "$BLUE" "Removing Zsh..."
 
@@ -259,12 +361,16 @@ remove_zsh() {
             chsh -s "$(command -v bash)"
         fi
 
-        sudo apt remove -y zsh
-        sudo apt autoremove -y
-        log "$GREEN" "Zsh removed successfully"
+        if sudo apt remove -y zsh && sudo apt autoremove -y; then
+            log "$GREEN" "Zsh removed successfully"
+        else
+            log "$RED" "Failed to remove Zsh package."
+            return 1
+        fi
     else
         log "$YELLOW" "Zsh not found"
     fi
+    return 0
 }
 
 # Function to clean up configuration files
@@ -303,12 +409,13 @@ cleanup_configs() {
         "$HOME/.antigen" # Antigen data
     )
      for item in "${zsh_dirs[@]}"; do
-         # Handle wildcard matching for directories/files
-         if compgen -G "$item" > /dev/null; then
-             for found_item in $item; do
+         # Handle wildcard matching for directories/files safe way
+         # Expand glob manually
+         for found_item in $item; do
+            if [ -e "$found_item" ]; then
                 rm -rf "$found_item" && cleaned_files=true
-             done
-         fi
+            fi
+         done
      done
 
     # Keep only the latest backup
@@ -401,10 +508,11 @@ main() {
     echo "  2) Only Oh My Posh"
     echo "  3) Only plugins"
     echo "  4) Only Zsh"
-    echo "  5) Cancel"
-    read -p "Enter your choice [1-5]: " uninstall_choice
+    echo "  5) Uninstall specific plugins"
+    echo "  6) Cancel"
+    read -p "Enter your choice [1-6]: " uninstall_choice
 
-    if [[ "$uninstall_choice" == "5" ]]; then
+    if [[ "$uninstall_choice" == "6" ]]; then
         log "$BLUE" "Uninstallation cancelled"
         exit 0
     fi
@@ -447,6 +555,8 @@ main() {
     elif [[ "$uninstall_choice" == "4" ]]; then
         remove_zsh || uninstall_success=false
         cleanup_configs || uninstall_success=false
+    elif [[ "$uninstall_choice" == "5" ]]; then
+        remove_specific_plugins || uninstall_success=false
     fi
 
     # Re-enable error handling

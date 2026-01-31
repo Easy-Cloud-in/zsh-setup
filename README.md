@@ -5,6 +5,8 @@ A modern Zsh environment setup with Oh My Posh themes, essential plugins, and ad
 ## Overview
 
 - Automates Zsh, Oh My Zsh, Oh My Posh, and plugin setup
+- **New!** Includes modern CLI tools: `zoxide`, `eza`, `bat`, `delta`, `tldr`
+- **New!** Selective plugin uninstallation
 - Includes robust safety features (backups, error logging, rollback)
 - Supports non-interactive and dry-run modes for automation
 - Compatible with Ubuntu/Debian-based Linux

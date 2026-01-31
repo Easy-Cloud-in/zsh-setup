@@ -32,12 +32,36 @@ log() {
 
 # Directory where Oh My Posh themes are stored
 readonly THEMES_DIR="$HOME/.oh-my-posh-themes"
-readonly PREVIEW_TIME=3  # Time in seconds to preview each theme
+readonly PREVIEW_TIME=3
 readonly ZSHRC_FILE="$HOME/.zshrc"
-readonly ZSHRC_BACKUP="$HOME/.zshrc.backup" # Fixed backup file name
 readonly OMP_MARKER_START="# --- Oh My Posh Theme Start ---"
 readonly OMP_MARKER_END="# --- Oh My Posh Theme End ---"
-readonly BACKUP_CONFIRM_PROMPT="Do you want to create a backup of your current .zshrc before applying a new theme? (y/n): "
+readonly BACKUP_DIR="$HOME/.zsh-backups"
+
+# Robust backup function
+backup_zshrc() {
+    mkdir -p "$BACKUP_DIR"
+
+    if [ -f "$ZSHRC_FILE" ]; then
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup_file="$BACKUP_DIR/.zshrc.backup.$timestamp"
+        
+        log "$BLUE" "Creating backup of existing .zshrc to $backup_file"
+        cp "$ZSHRC_FILE" "$backup_file"
+        
+        # Rotate backups: keep only the last 5
+        local backups=($(ls -t "$BACKUP_DIR"/.zshrc.backup.* 2>/dev/null))
+        if [ ${#backups[@]} -gt 5 ]; then
+            log "$YELLOW" "Rotating old backups..."
+            for ((i=5; i<${#backups[@]}; i++)); do
+                rm "${backups[$i]}"
+                log "$YELLOW" "Deleted old backup: ${backups[$i]}"
+            done
+        fi
+        
+        log "$GREEN" "Backup created and rotation applied."
+    fi
+}
 
 # Function to check dependencies
 check_dependencies() {
@@ -122,20 +146,32 @@ get_last_installed_theme() {
 }
 
 # Function to list themes
+# Function to list themes
 list_themes() {
     # Expects the themes array to be passed as an argument ($1: name of the array)
     local -n themes_ref=$1 # Use nameref for indirect array access
-    local count=1
+    local columns=3
+    local width=30
+    
+    log "$BLUE" "\n📚 Available Oh My Posh Themes"
+    log "$YELLOW" "══════════════════════════════════════════════════════════════"
 
-    log "$BLUE" "\nAvailable Oh My Posh themes:"
-    log "$YELLOW" "----------------------------------------"
+    local total=${#themes_ref[@]}
+    local rows=$(( (total + columns - 1) / columns ))
 
-    for theme in "${themes_ref[@]}"; do
-        echo -e "${GREEN}$count)${NC} $(basename "$theme")"
-        ((count++))
+    # Display themes in columns with padding
+    for ((i = 0; i < rows; i++)); do
+        for ((j = 0; j < columns; j++)); do
+            local index=$((j * rows + i))
+            if [ $index -lt $total ]; then
+                local theme_name=$(basename "${themes_ref[$index]}" .omp.json)
+                printf "${GREEN}[%03d]${NC} %-${width}s" $((index + 1)) "$theme_name"
+            fi
+        done
+        echo
     done
 
-    log "$YELLOW" "----------------------------------------"
+    log "$YELLOW" "══════════════════════════════════════════════════════════════"
 }
 
 # Function to preview a theme
@@ -155,7 +191,7 @@ preview_theme() {
 apply_theme() {
     local theme_path=$1
     local theme_name=$(basename "$theme_path")
-
+    
     # Check if .zshrc exists
     if [ ! -f "$ZSHRC_FILE" ]; then
         log "$RED" "Error: $ZSHRC_FILE not found. Cannot apply theme."
@@ -163,23 +199,20 @@ apply_theme() {
         exit 1
     fi
 
-    # Remove previous backup and create a new one with a fixed name
-    log "$BLUE" "Backing up $ZSHRC_FILE to $ZSHRC_BACKUP..."
-    rm -f "$ZSHRC_BACKUP" # Remove old backup first
-    cp "$ZSHRC_FILE" "$ZSHRC_BACKUP"
+    # Backup existing .zshrc
+    backup_zshrc
 
     # Remove previous Oh My Posh configuration block using markers
     log "$BLUE" "Removing previous Oh My Posh theme configuration (if any)..."
-    # Use awk for safer multi-line deletion between markers
-    # Read from current file, write to temporary file, then replace original
+    
+    # Use robust method to strip old block
     local temp_file=$(mktemp)
-    awk -v start="$OMP_MARKER_START" -v end="$OMP_MARKER_END" '
-        $0 == start {p=1}
-        !p {print}
-        $0 == end {p=0}
-    ' "$ZSHRC_FILE" > "$temp_file" && mv "$temp_file" "$ZSHRC_FILE"
+    if [ -f "$ZSHRC_FILE" ]; then
+        sed "/^${OMP_MARKER_START}$/,/^${OMP_MARKER_END}$/d" "$ZSHRC_FILE" > "$temp_file"
+        mv "$temp_file" "$ZSHRC_FILE"
+    fi
 
-    # Add new theme configuration with markers (idempotent: only one block)
+    # Add new theme configuration with markers
     log "$BLUE" "Applying new theme: $theme_name..."
     {
         echo "$OMP_MARKER_START"
@@ -190,10 +223,8 @@ apply_theme() {
     } >> "$ZSHRC_FILE"
 
     log "$GREEN" "Theme '$theme_name' successfully applied to $ZSHRC_FILE."
-    log "$YELLOW" "Backup created at $ZSHRC_BACKUP"
-    log "$YELLOW" "Restarting Zsh to apply changes..."
-
-    # Apply changes by restarting zsh
+    log "$YELLOW" "Please restart your terminal or run 'exec zsh' to apply changes."
+    
     exec zsh
 }
 
@@ -218,13 +249,13 @@ main() {
         # Show last installed theme after the list
         get_last_installed_theme
 
-        # Prompt for theme selection
-        log "$BLUE" "\nOptions:"
-        echo "- Enter a number (1-$theme_count) to select a theme"
-        echo "- Enter 'p' followed by a number to preview a theme (e.g., 'p1')"
-        echo "- Enter 'q' to quit"
-
-        read -p "Your choice: " choice
+        # Prompt for theme selection (Updated UX)
+        log "$BLUE" "\n🎨 Options:"
+        echo "  • Enter a number (1-$theme_count) to select a theme"
+        echo "  • Enter 'p' + number to preview (e.g., 'p1')"
+        echo "  • Enter 'q' to quit"
+        echo
+        read -p "💫 Your choice: " choice
 
         # Handle quit
         if [[ "$choice" == "q" ]]; then
@@ -245,25 +276,15 @@ main() {
         if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= theme_count)); then
             selected_theme="${themes[choice-1]}"
 
-            log "$YELLOW" "\nYou selected: $(basename "$selected_theme")"
-            # Backup confirmation prompt for safety
-            read -p "$BACKUP_CONFIRM_PROMPT" backup_confirm
-            if [[ "$backup_confirm" =~ ^[Yy]$ ]]; then
-                log "$BLUE" "Creating backup of $ZSHRC_FILE to $ZSHRC_BACKUP..."
-                cp "$ZSHRC_FILE" "$ZSHRC_BACKUP"
-                log "$GREEN" "Backup created at $ZSHRC_BACKUP"
-            else
-                log "$YELLOW" "Skipping backup as per user choice."
-            fi
-
-            read -p "Do you want to apply this theme? (y/n): " confirm
+            log "$YELLOW" "\n✨ You selected: $(basename "$selected_theme")"
+            read -p "📝 Do you want to apply this theme? (y/n): " confirm
 
             if [[ "$confirm" =~ ^[Yy]$ ]]; then
                 apply_theme "$selected_theme"
                 break
             fi
         else
-            log "$RED" "Invalid selection. Please try again."
+            log "$RED" "❌ Invalid selection. Please try again."
         fi
     done
 }

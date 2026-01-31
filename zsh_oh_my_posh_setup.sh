@@ -129,89 +129,144 @@ check_requirements() {
 }
 
 # Add new function to install fzf and related utilities
-install_search_utilities() {
-    local install_fzf="n"
-    local install_rg="n"
-    local install_fd="n"
-
-    log "$YELLOW" "Install optional search utilities?"
+# Install modern CLI tools
+install_modern_tools() {
+    log "$BLUE" "Checking for modern CLI tools..."
+    
+    local install_all="n"
     if [ "$NO_PROMPT" != true ]; then
-    read -p "  Install fzf (fuzzy finder)? (y/N): " install_fzf
-else
-    install_fzf="y"
-fi
-    if [ "$NO_PROMPT" != true ]; then
-    read -p "  Install ripgrep (rg - fast grep)? (y/N): " install_rg
-else
-    install_rg="y"
-fi
-    if [ "$NO_PROMPT" != true ]; then
-    read -p "  Install fd (fd-find - fast find)? (y/N): " install_fd
-else
-    install_fd="y"
-fi
-
-    # Install fzf
-    if [[ "$install_fzf" =~ ^[Yy]$ ]]; then
-        if ! command -v fzf > /dev/null; then
-            if [ -d ~/.fzf ]; then
-                log "$BLUE" "Found existing fzf directory. Updating..."
-                (cd ~/.fzf && git pull && ./install --all)
-            else
-                log "$BLUE" "Installing fzf..."
-                git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-                ~/.fzf/install --all
-            fi
-        else
-            log "$GREEN" "fzf is already installed."
-        fi
+        log "$YELLOW" "Modern Tools Suite: zoxide (smart cd), eza (modern ls), bat (modern cat), delta (git diff), tldr (docs), atuin (magic history)"
+        read -p "Install all recommended modern tools? (y/N): " install_all
     else
-        log "$YELLOW" "Skipping fzf installation."
+        install_all="y"
     fi
 
-    # Install ripgrep for better searching
-    if [[ "$install_rg" =~ ^[Yy]$ ]]; then
-        if ! command -v rg > /dev/null; then
-            log "$BLUE" "Installing ripgrep..."
-            sudo apt install -y ripgrep
+    should_install() {
+        local tool=$1
+        [[ "$install_all" =~ ^[Yy]$ ]] && return 0
+        local ans
+        if [ "$NO_PROMPT" != true ]; then
+            read -p "  Install $tool? (y/N): " ans
+            [[ "$ans" =~ ^[Yy]$ ]]
         else
-            log "$GREEN" "ripgrep is already installed."
+            return 1 # Default no if not all and no prompt
         fi
-    else
-         log "$YELLOW" "Skipping ripgrep installation."
+    }
+
+    # Common requirement for many tools
+    sudo apt update -y
+
+    # zoxide
+    if command -v zoxide > /dev/null; then
+        log "$GREEN" "zoxide is already installed."
+    elif should_install "zoxide"; then
+        log "$BLUE" "Installing zoxide..."
+        curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
     fi
 
-    # Install fd-find for better file finding
-    if [[ "$install_fd" =~ ^[Yy]$ ]]; then
-        if ! command -v fdfind > /dev/null && ! command -v fd > /dev/null; then
-            log "$BLUE" "Installing fd-find..."
-            sudo apt install -y fd-find
-            # Create symlink to make it available as 'fd' only if fd doesn't exist
-            if ! command -v fd > /dev/null; then
-                 if [ ! -f ~/.local/bin/fd ]; then
-                    mkdir -p ~/.local/bin
-                    ln -sf $(which fdfind) ~/.local/bin/fd
-                    log "$BLUE" "Symlinked fdfind to ~/.local/bin/fd"
-                 fi
-            fi
-        else
-            log "$GREEN" "fd-find (or fd) is already installed."
-        fi
-    else
-        log "$YELLOW" "Skipping fd-find installation."
+    # eza
+    if command -v eza > /dev/null; then
+        log "$GREEN" "eza is already installed."
+    elif should_install "eza"; then
+        log "$BLUE" "Installing eza..."
+        sudo mkdir -p /etc/apt/keyrings
+        wget -qO- https://raw.githubusercontent.com/eza-community/eza/main/deb.asc | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg
+        echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" | sudo tee /etc/apt/sources.list.d/gierens.list
+        sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list
+        sudo apt update
+        sudo apt install -y eza
     fi
 
-    # Always ensure ~/.local/bin is in PATH for the rest of the script
+    # bat
+    if command -v batcat > /dev/null || command -v bat > /dev/null; then
+        log "$GREEN" "bat is already installed."
+    elif should_install "bat"; then
+        log "$BLUE" "Installing bat..."
+        sudo apt install -y bat
+        mkdir -p ~/.local/bin
+        ln -sf /usr/bin/batcat ~/.local/bin/bat
+    fi
+
+    # git-delta
+    if command -v delta > /dev/null; then
+        log "$GREEN" "delta is already installed."
+    elif should_install "delta"; then
+        log "$BLUE" "Installing git-delta..."
+        # Delta is not always in apt for older versions, try binary or apt
+        if apt-cache search git-delta | grep -q git-delta; then
+             sudo apt install -y git-delta
+        else
+             # Failover to cargo if available or script? Let's use a common release deb if needed, 
+             # but to keep it safe let's assume apt or cargo.
+             if command -v cargo > /dev/null; then
+                 cargo install git-delta
+             else
+                 log "$YELLOW" "Skipping delta: not in apt and cargo not found."
+             fi
+        fi
+    fi
+
+    # tldr
+    if command -v tldr > /dev/null; then
+        log "$GREEN" "tldr is already installed."
+    elif should_install "tldr"; then
+        log "$BLUE" "Installing tldr..."
+        sudo apt install -y tldr || sudo apt install -y tealdeer
+        tldr --update 2>/dev/null || true
+    fi
+
+    # atuin
+    if command -v atuin > /dev/null; then
+        log "$GREEN" "atuin is already installed."
+    elif should_install "atuin"; then
+        log "$BLUE" "Installing atuin..."
+        curl --proto '=https' --tlsv1.2 -lsSf https://setup.atuin.sh | sh
+    fi
+    
+    # fzf, ripgrep, fd (Original utils)
+    if should_install "fzf (fuzzy finder)"; then
+         if ! command -v fzf > /dev/null; then
+            git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+            ~/.fzf/install --all
+         fi
+    fi
+
+    if should_install "ripgrep"; then
+         sudo apt install -y ripgrep
+    fi
+
+    if should_install "fd-find"; then
+         sudo apt install -y fd-find
+         mkdir -p ~/.local/bin
+         ln -sf $(which fdfind) ~/.local/bin/fd
+    fi
+
     export PATH="$HOME/.local/bin:$PATH"
 }
 
-# Backup existing .zshrc if it exists
+# Robust backup function
 backup_zshrc() {
+    local backup_dir="$HOME/.zsh-backups"
+    mkdir -p "$backup_dir"
+
     if [ -f ~/.zshrc ]; then
-        local backup_file=~/.zshrc.backup.$(date +%Y%m%d_%H%M%S)
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup_file="$backup_dir/.zshrc.backup.$timestamp"
+        
         log "$BLUE" "Creating backup of existing .zshrc to $backup_file"
         cp ~/.zshrc "$backup_file"
-        log "$GREEN" "Backup created at $backup_file"
+        
+        # Rotate backups: keep only the last 5
+        local backups=($(ls -t "$backup_dir"/.zshrc.backup.* 2>/dev/null))
+        if [ ${#backups[@]} -gt 5 ]; then
+            log "$YELLOW" "Rotating old backups..."
+            for ((i=5; i<${#backups[@]}; i++)); do
+                rm "${backups[$i]}"
+                log "$YELLOW" "Deleted old backup: ${backups[$i]}"
+            done
+        fi
+        
+        log "$GREEN" "Backup created and rotation applied."
     fi
 }
 
@@ -229,41 +284,19 @@ install_zsh() {
         log "$GREEN" "Zsh is already installed."
     fi
 
-    # Clean up and normalize /etc/shells
-    log "$BLUE" "Cleaning up duplicate shell entries..."
-
-    # Create a temporary file
-    TEMP_SHELLS=$(mktemp)
-
-    # Add header
-    echo "# /etc/shells: valid login shells" > "$TEMP_SHELLS"
-
-    # Add unique shell entries
-    {
-        echo "/bin/sh"
-        echo "/bin/bash"
-        echo "/usr/bin/bash"
-        echo "/bin/rbash"
-        echo "/usr/bin/rbash"
-        echo "/bin/dash"
-        echo "/usr/bin/dash"
-        echo "/bin/zsh"
-        echo "/usr/bin/zsh"
-    } | while read shell; do
-        if [ -f "$shell" ]; then
-            echo "$shell" >> "$TEMP_SHELLS"
+    # Ensure Zsh is in /etc/shells
+    local zsh_path="$(command -v zsh)"
+    if [ -n "$zsh_path" ]; then
+        if ! grep -q "^${zsh_path}$" /etc/shells; then
+            log "$BLUE" "Adding Zsh to valid login shells..."
+            echo "${zsh_path}" | sudo tee -a /etc/shells > /dev/null
+            log "$GREEN" "Added $zsh_path to /etc/shells"
+        else
+            log "$GREEN" "Zsh is already in /etc/shells"
         fi
-    done | sort -u
-
-    # Replace /etc/shells safely
-    if [ -w /etc/shells ]; then
-        sudo mv "$TEMP_SHELLS" /etc/shells
-        sudo chmod 644 /etc/shells
-        log "$GREEN" "Updated /etc/shells successfully"
     else
-        sudo bash -c "cat $TEMP_SHELLS > /etc/shells"
-        rm -f "$TEMP_SHELLS"
-        log "$GREEN" "Updated /etc/shells successfully"
+        log "$RED" "Error: Zsh binary not found after installation!"
+        return 1
     fi
 
     # Ensure Zsh is in the list of valid login shells
@@ -386,6 +419,7 @@ install_plugins() {
     install_or_update_plugin "fzf-tab" "https://github.com/Aloxaf/fzf-tab"
     install_or_update_plugin "zsh-autosuggestions" "https://github.com/zsh-users/zsh-autosuggestions"
     install_or_update_plugin "zsh-syntax-highlighting" "https://github.com/zsh-users/zsh-syntax-highlighting"
+    install_or_update_plugin "zsh-history-substring-search" "https://github.com/zsh-users/zsh-history-substring-search"
 
     return $install_status
 }
@@ -416,13 +450,12 @@ ZSH_THEME=""
 # or manually deferring plugin loading if startup feels slow.
 # The plugins listed here are generally useful and reasonably fast.
 # --------------------------
-plugins=(
     git
     zsh-completions
     zsh-autosuggestions
     fzf-tab
+    zsh-history-substring-search
     zsh-syntax-highlighting # Note: zsh-syntax-highlighting must be the last plugin loaded
-)
 
 # Initialize Oh My Zsh (loads plugins etc.)
 source $ZSH/oh-my-zsh.sh
@@ -500,7 +533,7 @@ fi
 # compared to lazy loading, but ensures Node is available immediately.
 # --------------------------------------------------------------------------
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # Load nvm
+[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" # Load nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion" # Load nvm bash_completion (works in Zsh too)
 # The nvm script should handle adding the correct Node version to the PATH
 
@@ -531,6 +564,39 @@ fi
 # END BASH MIGRATION
 
 EOL
+
+    # --- Modern Tools Configuration ---
+    cat >> ~/.zshrc << 'EOZC'
+    
+# --- Modern Tools Aliases & Config ---
+if command -v zoxide > /dev/null; then
+    eval "$(zoxide init zsh)"
+    alias cd="z"
+fi
+
+if command -v eza > /dev/null; then
+    alias ls="eza --icons"
+    alias ll="eza -l --icons --git"
+    alias la="eza -la --icons --git"
+    alias lt="eza --tree --icons"
+fi
+
+if command -v bat > /dev/null; then
+    alias cat="bat"
+fi
+
+if command -v atuin > /dev/null; then
+    eval "$(atuin init zsh)"
+fi
+
+# History Substring Search Keybindings
+bindkey '^[[A' history-substring-search-up
+bindkey '^[[B' history-substring-search-down
+# Also bind for non-standard terminals or modes if needed
+bindkey "$terminfo[kcuu1]" history-substring-search-up
+bindkey "$terminfo[kcud1]" history-substring-search-down
+EOZC
+
 
     # --- Oh My Posh Initialization ---
     # Tip: This sets your prompt. Complex themes can *slightly* impact startup.
@@ -815,7 +881,7 @@ main() {
         install_zsh
         install_oh_my_zsh
         install_oh_my_posh
-        install_search_utilities
+        install_modern_tools
         # Install/Update plugins
         if install_plugins; then
              log "$GREEN" "All plugins installed/updated successfully."
