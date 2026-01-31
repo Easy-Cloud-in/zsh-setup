@@ -1,3 +1,10 @@
+## [v1.0.5] - 2026-01-31
+
+### Changes
+- fix: release script in the build
+- feat: added a release script in the build
+
+
 ## [v1.0.4] - 2026-01-31
 
 ### Changes
