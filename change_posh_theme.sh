@@ -146,10 +146,8 @@ get_last_installed_theme() {
 }
 
 # Function to list themes
-# Function to list themes
 list_themes() {
-    # Expects the themes array to be passed as an argument ($1: name of the array)
-    local -n themes_ref=$1 # Use nameref for indirect array access
+    local -n themes_ref=$1
     local columns=3
     local width=30
     
@@ -159,7 +157,6 @@ list_themes() {
     local total=${#themes_ref[@]}
     local rows=$(( (total + columns - 1) / columns ))
 
-    # Display themes in columns with padding
     for ((i = 0; i < rows; i++)); do
         for ((j = 0; j < columns; j++)); do
             local index=$((j * rows + i))
@@ -174,17 +171,69 @@ list_themes() {
     log "$YELLOW" "══════════════════════════════════════════════════════════════"
 }
 
-# Function to preview a theme
-preview_theme() {
+# Improved preview function using subshell
+preview_theme_subshell() {
     local theme_path=$1
     local theme_name=$(basename "$theme_path")
 
     log "$BLUE" "\nPreviewing theme: $theme_name"
-    log "$YELLOW" "Preview will last for $PREVIEW_TIME seconds..."
+    log "$YELLOW" "Opening temporary shell with theme... Type 'exit' or Ctrl+D to return."
 
-    # Temporarily apply theme
-    eval "$(oh-my-posh init zsh --config "$theme_path")"
-    sleep "$PREVIEW_TIME"
+    # Create a temporary directory for ZDOTDIR
+    local temp_dir=$(mktemp -d)
+    local temp_zshrc="$temp_dir/.zshrc"
+    
+    cat << EOF > "$temp_zshrc"
+# Preview configuration
+export ZDOTDIR="$HOME" # Reset ZDOTDIR so subsequent shells find the real config if needed (optional)
+source "$HOME/.zshrc" 2>/dev/null || true
+# Override theme
+eval "\$(oh-my-posh init zsh --config '$theme_path')"
+echo
+echo -e "\033[1;32m🎨 Previewing: $theme_name \033[0m"
+echo "---------------------------------------------------"
+echo "Try typing commands to see how the prompt behaves."
+echo "Type 'exit' to return to the menu."
+echo
+EOF
+
+    # Launch Zsh with the temp config directory
+    # Zsh will look for .zshrc in ZDOTDIR
+    ZDOTDIR="$temp_dir" zsh -i || true
+
+    # Clean up
+    rm -rf "$temp_dir"
+    clear
+}
+
+# Interactive selection using fzf
+interactive_fzf_selection() {
+    local themes_dir=$1
+    local fzf_path=$2
+    
+    # Send logs to stderr so they aren't captured by command substitution
+    log "$BLUE" "Launching interactive preview with fzf..." >&2
+    log "$YELLOW" "Use Arrow keys to navigate. The preview pane shows the prompt." >&2
+    log "$YELLOW" "Press ENTER to select a theme, ESC to quit." >&2
+    
+    # We use --shell bash for preview but strip the \[ and \] markers using sed for clean rendering
+    local selected_config=$(find "$themes_dir" -name "*.omp.json" -type f | \
+        "$fzf_path" \
+        --preview 'oh-my-posh print primary --config {} --shell bash | sed "s/\\\\\[//g; s/\\\\]//g"' \
+        --preview-window 'top:45%' \
+        --height '80%' \
+        --layout=reverse \
+        --header 'Select Oh My Posh Theme (ESC to Quit/Cancel)' \
+        --border \
+        --prompt 'Theme > '
+    )
+    
+    if [ -n "$selected_config" ]; then
+        echo "$selected_config"
+        return 0
+    fi
+    
+    return 1
 }
 
 # Function to apply the selected theme
@@ -192,40 +241,40 @@ apply_theme() {
     local theme_path=$1
     local theme_name=$(basename "$theme_path")
     
-    # Check if .zshrc exists
     if [ ! -f "$ZSHRC_FILE" ]; then
-        log "$RED" "Error: $ZSHRC_FILE not found. Cannot apply theme."
-        log "$YELLOW" "Please ensure your Zsh configuration file exists."
+        log "$RED" "Error: $ZSHRC_FILE not found."
         exit 1
     fi
 
-    # Backup existing .zshrc
     backup_zshrc
 
-    # Remove previous Oh My Posh configuration block using markers
-    log "$BLUE" "Removing previous Oh My Posh theme configuration (if any)..."
+    log "$BLUE" "Updating .zshrc..."
     
-    # Use robust method to strip old block
+    # Create temp file
     local temp_file=$(mktemp)
-    if [ -f "$ZSHRC_FILE" ]; then
-        sed "/^${OMP_MARKER_START}$/,/^${OMP_MARKER_END}$/d" "$ZSHRC_FILE" > "$temp_file"
-        mv "$temp_file" "$ZSHRC_FILE"
-    fi
-
-    # Add new theme configuration with markers
-    log "$BLUE" "Applying new theme: $theme_name..."
+    
+    # Copy zshrc excluding old Posh block
+    sed "/^${OMP_MARKER_START}$/,/^${OMP_MARKER_END}$/d" "$ZSHRC_FILE" > "$temp_file"
+    
+    # Append new block
     {
         echo "$OMP_MARKER_START"
         echo "# BEGIN: Oh My Posh theme block (auto-generated)"
         echo "eval \"\$(oh-my-posh init zsh --config '$theme_path')\""
         echo "# END: Oh My Posh theme block"
         echo "$OMP_MARKER_END"
-    } >> "$ZSHRC_FILE"
-
-    log "$GREEN" "Theme '$theme_name' successfully applied to $ZSHRC_FILE."
-    log "$YELLOW" "Please restart your terminal or run 'exec zsh' to apply changes."
+    } >> "$temp_file"
     
-    exec zsh
+    mv "$temp_file" "$ZSHRC_FILE"
+
+    log "$GREEN" "✨ Theme '$theme_name' applied!"
+    log "$YELLOW" "Restart your terminal or run 'exec zsh' to see changes."
+    
+    # Optional: Exec zsh to apply immediately
+    read -p "Reload shell now? (y/N): " reload
+    if [[ "$reload" =~ ^[Yy]$ ]]; then
+        exec zsh
+    fi
 }
 
 # Main function
@@ -233,61 +282,81 @@ main() {
     check_dependencies
     check_themes_dir
 
+    # Check for fzf location
+    local fzf_cmd=""
+    if command -v fzf &> /dev/null; then
+        fzf_cmd=$(command -v fzf)
+    elif [ -f "$HOME/.fzf/bin/fzf" ]; then
+        fzf_cmd="$HOME/.fzf/bin/fzf"
+    fi
+
+    # Auto-detect mode
+    if [ -n "$fzf_cmd" ]; then
+        log "$GREEN" "Interactive filter (fzf) detected."
+        local selected
+        if selected=$(interactive_fzf_selection "$THEMES_DIR" "$fzf_cmd"); then
+             log "$YELLOW" "\nSelected theme: $(basename "$selected")"
+             read -p "Apply this theme? (y/N): " confirm_fzf
+             if [[ "$confirm_fzf" =~ ^[Yy]$ ]]; then
+                 apply_theme "$selected"
+             else
+                 log "$YELLOW" "Cancelled. No changes made."
+             fi
+             exit 0
+        else
+             log "$YELLOW" "Selection cancelled."
+             # Do not exit, fall back to menu or just exit? 
+             # Usually cancellation means user wants to quit.
+             # But let's ask if they want the manual menu.
+             read -p "Open manual selection menu? (y/N): " manual_opt
+             if [[ ! "$manual_opt" =~ ^[Yy]$ ]]; then
+                 exit 0
+             fi
+        fi
+    fi
+
+    # Fallback to manual loop
     while true; do
-        # Get available themes sorted alphabetically
         mapfile -t themes < <(find "$THEMES_DIR" -name "*.omp.json" -type f | sort)
         local theme_count=${#themes[@]}
 
         if [ "$theme_count" -eq 0 ]; then
-             log "$RED" "No Oh My Posh themes (*.omp.json) found in $THEMES_DIR."
+             log "$RED" "No themes found."
              exit 1
         fi
 
-        # List themes
-        list_themes themes # Pass the array name 'themes'
-
-        # Show last installed theme after the list
+        list_themes themes
         get_last_installed_theme
 
-        # Prompt for theme selection (Updated UX)
         log "$BLUE" "\n🎨 Options:"
-        echo "  • Enter a number (1-$theme_count) to select a theme"
+        echo "  • Enter number (1-$theme_count) to select"
         echo "  • Enter 'p' + number to preview (e.g., 'p1')"
         echo "  • Enter 'q' to quit"
         echo
         read -p "💫 Your choice: " choice
 
-        # Handle quit
         if [[ "$choice" == "q" ]]; then
-            log "$GREEN" "No changes made. Exiting..."
+            log "$GREEN" "Bye!"
             exit 0
         fi
 
-        # Handle preview
-        if [[ "$choice" =~ ^p[0-9]+$ ]]; then
-            number=${choice:1}
+        if [[ "$choice" =~ ^p([0-9]+)$ ]]; then
+            number=${match[1]}
             if ((number >= 1 && number <= theme_count)); then
-                preview_theme "${themes[number-1]}"
+                preview_theme_subshell "${themes[number-1]}"
                 continue
             fi
         fi
 
-        # Handle theme selection
         if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= theme_count)); then
             selected_theme="${themes[choice-1]}"
-
-            log "$YELLOW" "\n✨ You selected: $(basename "$selected_theme")"
-            read -p "📝 Do you want to apply this theme? (y/n): " confirm
-
-            if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                apply_theme "$selected_theme"
-                break
-            fi
-        else
-            log "$RED" "❌ Invalid selection. Please try again."
+            log "$YELLOW" "\n✨ Selected: $(basename "$selected_theme")"
+            apply_theme "$selected_theme"
+            break
         fi
+        
+        log "$RED" "Invalid choice."
     done
 }
 
-# Run main function
 main

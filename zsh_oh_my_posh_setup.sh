@@ -48,6 +48,12 @@ FORCE_UPDATE=false
 # Add a flag to only update .zshrc
 UPDATE_RC=false
 
+# Initialize other flags defaults
+DRY_RUN=false
+NO_PROMPT=false
+SELF_CHECK=false
+
+
 # Define colors as variables for better maintainability
 readonly RED='\033[1;31m'
 readonly GREEN='\033[1;32m'
@@ -450,12 +456,14 @@ ZSH_THEME=""
 # or manually deferring plugin loading if startup feels slow.
 # The plugins listed here are generally useful and reasonably fast.
 # --------------------------
+plugins=(
     git
     zsh-completions
     zsh-autosuggestions
     fzf-tab
     zsh-history-substring-search
     zsh-syntax-highlighting # Note: zsh-syntax-highlighting must be the last plugin loaded
+)
 
 # Initialize Oh My Zsh (loads plugins etc.)
 source $ZSH/oh-my-zsh.sh
