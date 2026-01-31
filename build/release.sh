@@ -115,7 +115,8 @@ echo -e "${GREEN}✅ CHANGELOG.md updated.${NC}"
 # 4. Commit and Push
 echo -e "\n${YELLOW}💾 Committing and Pushing...${NC}"
 git add CHANGELOG.md
-git commit -m "chore: release v$NEW_VERSION"
+# Add [skip version] and [skip changelog] to prevent hooks from double-processing
+git commit -m "chore: release v$NEW_VERSION [skip version] [skip changelog]"
 
 echo "   Pushing to origin (hooks handles tagging)..."
 git push origin main
@@ -124,6 +125,6 @@ echo -e "${GREEN}✅ Pushed successfully.${NC}"
 
 # 5. Build Distribution
 echo -e "\n${YELLOW}📦 Building Distribution...${NC}"
-./build/create-distribution.sh --create-release
+./build/create-distribution.sh --create-release --ignore-changelog
 
 echo -e "\n${GREEN}🎉 Release v$NEW_VERSION completed successfully!${NC}"
