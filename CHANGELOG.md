@@ -1,3 +1,9 @@
+## [v1.0.4] - 2026-01-31
+
+### Changes
+- fix: uninstall script
+- fix: ohmy-posh-theme change script
+
 ## [v1.0.1] - 2025-08-22
 
 ### Changes
@@ -16,6 +22,3 @@
 - fixed uninstall bugs
 - Updated Syntax error in script
 - version 1.0.1
-
-
-- 2026-01-31 fix: uninstall script
